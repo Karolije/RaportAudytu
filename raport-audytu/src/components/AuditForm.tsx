@@ -1,110 +1,136 @@
-import React, { useState, ChangeEvent } from 'react';
-import { jsPDF } from 'jspdf';
-import font from "../fonts/Roboto-Regular-normal";
-import './AuditForm.css'; // dodatkowy plik CSS dla stylów
+import React, { useState } from 'react';
+import jsPDF from 'jspdf';
+import font from '../fonts/Roboto-Regular-normal'; // Base64 czcionki UTF-8
 
 interface Question {
   id: number;
   text: string;
-  answer: boolean | null;
-  note: string;
-  images: string[];
+  answer?: boolean;
+  note?: string;
+  images?: string[];
 }
 
-const initialQuestions: Question[] = [
-  { id: 1, text: 'Czy dokumentacja jest kompletna?', answer: null, note: '', images: [] },
-  { id: 2, text: 'Czy sprzęt działa prawidłowo?', answer: null, note: '', images: [] },
-  { id: 3, text: 'Czy miejsce pracy jest czyste?', answer: null, note: '', images: [] },
-];
-
-export default function AuditForm() {
-  const [questions, setQuestions] = useState<Question[]>(initialQuestions);
+const AuditForm: React.FC = () => {
+  const [questions, setQuestions] = useState<Question[]>([
+    { id: 1, text: 'Czy sprzęt działa prawidłowo?', answer: undefined, note: '', images: [] },
+    { id: 2, text: 'Czy miejsce pracy jest czyste?', answer: undefined, note: '', images: [] },
+    { id: 3, text: 'Czy dokumentacja jest kompletna?', answer: undefined, note: '', images: [] },
+  ]);
 
   const setAnswer = (id: number, value: boolean) => {
-    setQuestions(prev => prev.map(q => q.id === id ? { ...q, answer: value } : q));
+    setQuestions(prev => prev.map(q => (q.id === id ? { ...q, answer: value } : q)));
   };
 
   const updateNote = (id: number, text: string) => {
-    setQuestions(prev => prev.map(q => q.id === id ? { ...q, note: text } : q));
+    setQuestions(prev => prev.map(q => (q.id === id ? { ...q, note: text } : q)));
   };
 
-  const addPhoto = (id: number, e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setQuestions(prev => prev.map(q => q.id === id ? { ...q, images: [...q.images, reader.result as string] } : q));
+  const addPhoto = (id: number) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = e => {
+      const target = e.target as HTMLInputElement;
+      if (target.files && target.files[0]) {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const base64 = ev.target?.result as string;
+          setQuestions(prev =>
+            prev.map(q => (q.id === id ? { ...q, images: [...(q.images || []), base64] } : q))
+          );
+        };
+        reader.readAsDataURL(target.files[0]);
+      }
     };
-    reader.readAsDataURL(file);
+    input.click();
   };
 
   const generatePDF = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF('p', 'mm', 'a4');
 
-    // Rejestracja czcionki TTF dla polskich znaków
+    // dodanie czcionki UTF-8
     doc.addFileToVFS('Roboto-Regular.ttf', font);
     doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
     doc.setFont('Roboto');
 
-    let y = 10;
-    questions.forEach(q => {
-      doc.setFontSize(14);
-      doc.text(q.text, 10, y);
-      y += 8;
+    let y = 15;
 
+    // Nagłówek
+    doc.setFontSize(24);
+    doc.text('Raport Audytu', 105, y, { align: 'center' });
+    y += 15;
+    doc.setFontSize(12);
+    doc.text(`Data: ${new Date().toLocaleDateString()}`, 105, y, { align: 'center' });
+    y += 15;
+
+    questions.forEach((q, idx) => {
+      if (y > 250) { doc.addPage(); y = 15; }
+
+      // Pytanie
+      doc.setFontSize(14);
+      doc.text(`${idx + 1}. ${q.text}`, 10, y);
+      y += 7;
+
+      // Odpowiedź
       const answerText = q.answer === true ? 'Tak' : q.answer === false ? 'Nie' : 'Brak odpowiedzi';
       doc.setFontSize(12);
-      doc.text(`Odpowiedź: ${answerText}`, 10, y);
-      y += 6;
+      doc.text(`Odpowiedź: ${answerText}`, 12, y);
+      y += 7;
 
+      // Uwagi
       if (q.note) {
-        doc.text(`Uwagi: ${q.note}`, 10, y);
-        y += 6;
+        doc.text(`Uwagi: ${q.note}`, 12, y);
+        y += 7;
       }
 
-      q.images.forEach(img => {
-        if (y > 250) {
-          doc.addPage();
-          y = 10;
-        }
-        doc.addImage(img, 'JPEG', 10, y, 60, 45);
-        y += 50;
+      // Zdjęcia – duże i estetycznie ułożone
+      q.images?.forEach(img => {
+        if (!img) return;
+        if (y + 90 > 297) { doc.addPage(); y = 15; }
+        doc.addImage(img, 'JPEG', 15, y, 180, 90);
+        y += 95; // odstęp po zdjęciu
       });
 
-      y += 10;
+      // Linia oddzielająca pytania
+      doc.setDrawColor(200);
+      doc.setLineWidth(0.3);
+      doc.line(10, y, 200, y);
+      y += 7;
     });
 
-    doc.save('raport_audytu.pdf');
+    doc.save(`Raport-Audytu-${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
   return (
-    <div className="audit-form">
+    <div style={{ padding: 20 }}>
+      <h1>Raport Audytu</h1>
       {questions.map(q => (
-        <div key={q.id} className="question-container">
-          <p className="question-text">{q.text}</p>
-          <div className="checkbox-row">
-            <label className="checkbox-label">
-              <input type="checkbox" checked={q.answer === true} onChange={() => setAnswer(q.id, true)} />
-              Tak
-            </label>
-            <label className="checkbox-label">
-              <input type="checkbox" checked={q.answer === false} onChange={() => setAnswer(q.id, false)} />
-              Nie
-            </label>
+        <div key={q.id} style={{ marginBottom: 30, borderBottom: '1px solid #ccc', paddingBottom: 10 }}>
+          <p style={{ fontSize: 18 }}>{q.text}</p>
+          <div style={{ display: 'flex', gap: 20, marginBottom: 8 }}>
+            <label><input type="radio" checked={q.answer === true} onChange={() => setAnswer(q.id, true)} /> Tak</label>
+            <label><input type="radio" checked={q.answer === false} onChange={() => setAnswer(q.id, false)} /> Nie</label>
           </div>
           <textarea
             placeholder="Wpisz własną uwagę..."
             value={q.note}
             onChange={e => updateNote(q.id, e.target.value)}
-            className="note-input"
+            style={{ width: '100%', padding: 10, borderRadius: 5, border: '1px solid #ccc' }}
           />
-          <input type="file" accept="image/*" capture="environment" onChange={e => addPhoto(q.id, e)} />
-          <div className="images-row">
-            {q.images.map((img, i) => <img key={i} src={img} alt={`Zdjęcie ${i + 1}`} className="image-preview" />)}
+          <br />
+          <button onClick={() => addPhoto(q.id)} style={{ marginTop: 8 }}>Dodaj zdjęcie</button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+            {q.images?.map((img, i) => (
+              <img key={i} src={img} alt="zdjęcie" style={{ width: 150, height: 'auto', borderRadius: 5 }} />
+            ))}
           </div>
         </div>
       ))}
-      <button className="pdf-button" onClick={generatePDF}>GENERUJ PDF</button>
+      <button onClick={generatePDF} style={{ padding: '10px 20px', fontSize: 16, backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: 5 }}>
+        GENERUJ PDF
+      </button>
     </div>
   );
-}
+};
+
+export default AuditForm;
