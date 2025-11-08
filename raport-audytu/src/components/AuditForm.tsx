@@ -1,13 +1,14 @@
-// src/components/AuditForm.tsx
-import React, { useState } from 'react';
+import React, { useState, ChangeEvent } from 'react';
 import { jsPDF } from 'jspdf';
+import font from "../fonts/Roboto-Regular-normal";
+import './AuditForm.css'; // dodatkowy plik CSS dla stylów
 
 interface Question {
   id: number;
   text: string;
   answer: boolean | null;
   note: string;
-  images: string[]; // base64
+  images: string[];
 }
 
 const initialQuestions: Question[] = [
@@ -16,104 +17,94 @@ const initialQuestions: Question[] = [
   { id: 3, text: 'Czy miejsce pracy jest czyste?', answer: null, note: '', images: [] },
 ];
 
-export const AuditForm: React.FC = () => {
+export default function AuditForm() {
   const [questions, setQuestions] = useState<Question[]>(initialQuestions);
 
   const setAnswer = (id: number, value: boolean) => {
-    setQuestions(prev =>
-      prev.map(q => (q.id === id ? { ...q, answer: value } : q))
-    );
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, answer: value } : q));
   };
 
   const updateNote = (id: number, text: string) => {
-    setQuestions(prev =>
-      prev.map(q => (q.id === id ? { ...q, note: text } : q))
-    );
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, note: text } : q));
   };
 
-  const addImage = (id: number, file: File) => {
+  const addPhoto = (id: number, e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64 = reader.result as string;
-      setQuestions(prev =>
-        prev.map(q => (q.id === id ? { ...q, images: [...q.images, base64] } : q))
-      );
+      setQuestions(prev => prev.map(q => q.id === id ? { ...q, images: [...q.images, reader.result as string] } : q));
     };
     reader.readAsDataURL(file);
   };
 
   const generatePDF = () => {
     const doc = new jsPDF();
-    let y = 10;
 
+    // Rejestracja czcionki TTF dla polskich znaków
+    doc.addFileToVFS('Roboto-Regular.ttf', font);
+    doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
+    doc.setFont('Roboto');
+
+    let y = 10;
     questions.forEach(q => {
       doc.setFontSize(14);
       doc.text(q.text, 10, y);
-      y += 7;
+      y += 8;
+
+      const answerText = q.answer === true ? 'Tak' : q.answer === false ? 'Nie' : 'Brak odpowiedzi';
       doc.setFontSize(12);
-      doc.text('Odpowiedź: ' + (q.answer === true ? 'Tak' : q.answer === false ? 'Nie' : 'Brak'), 10, y);
-      y += 7;
+      doc.text(`Odpowiedź: ${answerText}`, 10, y);
+      y += 6;
+
       if (q.note) {
-        doc.text('Uwagi: ' + q.note, 10, y);
-        y += 7;
+        doc.text(`Uwagi: ${q.note}`, 10, y);
+        y += 6;
       }
+
       q.images.forEach(img => {
-        doc.addImage(img, 'JPEG', 10, y, 50, 50);
-        y += 55;
+        if (y > 250) {
+          doc.addPage();
+          y = 10;
+        }
+        doc.addImage(img, 'JPEG', 10, y, 60, 45);
+        y += 50;
       });
-      y += 5;
-      if (y > 250) doc.addPage() && (y = 10); // nowa strona jeśli koniec strony
+
+      y += 10;
     });
 
-    doc.save('raport.pdf');
+    doc.save('raport_audytu.pdf');
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div className="audit-form">
       {questions.map(q => (
-        <div key={q.id} style={{ marginBottom: 20, borderBottom: '1px solid #ccc', paddingBottom: 10 }}>
-          <p>{q.text}</p>
-          <div>
-            <button onClick={() => setAnswer(q.id, true)} style={{ marginRight: 10 }}>
-              Tak {q.answer === true && '✓'}
-            </button>
-            <button onClick={() => setAnswer(q.id, false)}>
-              Nie {q.answer === false && '✓'}
-            </button>
+        <div key={q.id} className="question-container">
+          <p className="question-text">{q.text}</p>
+          <div className="checkbox-row">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={q.answer === true} onChange={() => setAnswer(q.id, true)} />
+              Tak
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={q.answer === false} onChange={() => setAnswer(q.id, false)} />
+              Nie
+            </label>
           </div>
-          <div style={{ marginTop: 10 }}>
-            <textarea
-              placeholder="Uwagi..."
-              value={q.note}
-              onChange={e => updateNote(q.id, e.target.value)}
-              style={{ width: '100%', minHeight: 50 }}
-            />
-          </div>
-          <div style={{ marginTop: 10 }}>
-  <input
-    type="file"
-    accept="image/*"
-    capture="environment" // otworzy tylny aparat na telefonie
-    onChange={e => e.target.files && addImage(q.id, e.target.files[0])}
-    style={{ display: 'none' }}
-    id={`file-input-${q.id}`}
-  />
-  <label htmlFor={`file-input-${q.id}`} style={{ cursor: 'pointer', padding: '5px 10px', backgroundColor: '#007bff', color: 'white', borderRadius: 5 }}>
-    Dodaj zdjęcie
-  </label>
-</div>
-
-          <div style={{ display: 'flex', marginTop: 10, gap: 10 }}>
-            {q.images.map((img, idx) => (
-              <img key={idx} src={img} alt="Zdjęcie" style={{ width: 80, height: 80, objectFit: 'cover' }} />
-            ))}
+          <textarea
+            placeholder="Wpisz własną uwagę..."
+            value={q.note}
+            onChange={e => updateNote(q.id, e.target.value)}
+            className="note-input"
+          />
+          <input type="file" accept="image/*" capture="environment" onChange={e => addPhoto(q.id, e)} />
+          <div className="images-row">
+            {q.images.map((img, i) => <img key={i} src={img} alt={`Zdjęcie ${i + 1}`} className="image-preview" />)}
           </div>
         </div>
       ))}
-
-      <button onClick={generatePDF} style={{ marginTop: 20 }}>
-        Generuj PDF
-      </button>
+      <button className="pdf-button" onClick={generatePDF}>GENERUJ PDF</button>
     </div>
   );
-};
+}

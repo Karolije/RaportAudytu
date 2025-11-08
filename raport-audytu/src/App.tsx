@@ -1,7 +1,7 @@
 import React from 'react';
 import logo from './logo.svg';
 import './App.css';
-import AuditForm from './AuditForm';
+import AuditForm from './components/AuditForm';
 
 function App() {
   return (
