@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import jsPDF from 'jspdf';
-import font from '../fonts/Roboto-Regular-normal'; // Base64 czcionki UTF-8
+import font from '../fonts/Roboto-Regular-normal';
 
 interface Question {
   id: number;
@@ -10,13 +10,9 @@ interface Question {
   images?: string[];
 }
 
-interface SectionData {
-  id: string;
-  name: string;
-  questions: Question[];
-}
+const categories = ['CMG.2', 'CMG.3', 'LWN', 'CMG.5', 'CMG.6'];
 
-const baseQuestions: Question[] = [
+const initialQuestions: Question[] = [
   { id: 1, text: 'Zaleganie ścinek pod piłą', answer: undefined, note: '', images: [] },
   { id: 2, text: 'Zapylenie maszyn produkcja', answer: undefined, note: '', images: [] },
   { id: 3, text: 'Zapylenie maszyn UR', answer: undefined, note: '', images: [] },
@@ -27,256 +23,224 @@ const baseQuestions: Question[] = [
   { id: 8, text: 'Zalegający brud', answer: undefined, note: '', images: [] },
 ];
 
-const categories = ['CMG.2', 'CMG.3', 'LWN', 'CMG.5', 'CMG.6'];
-
 const AuditForm: React.FC = () => {
-  // każda zakładka ma osobny zestaw 8 pytań
-  const [sections, setSections] = useState<SectionData[]>(() =>
-    categories.map(cat => ({
-      id: cat,
-      name: cat,
-      questions: JSON.parse(JSON.stringify(baseQuestions)), // głęboka kopia
-    }))
+  const [activeTab, setActiveTab] = useState<string>('CMG.2');
+  const [questions, setQuestions] = useState<Record<string, Question[]>>(
+    Object.fromEntries(categories.map(c => [c, initialQuestions.map(q => ({ ...q }))]))
   );
 
-  const [activeTab, setActiveTab] = useState('CMG.2');
-
-  const setAnswer = (sectionId: string, qid: number, value: boolean) => {
-    setSections(prev =>
-      prev.map(sec =>
-        sec.id === sectionId
-          ? {
-              ...sec,
-              questions: sec.questions.map(q => (q.id === qid ? { ...q, answer: value } : q)),
-            }
-          : sec
-      )
-    );
+  const setAnswer = (cat: string, id: number, value: boolean) => {
+    setQuestions(prev => ({
+      ...prev,
+      [cat]: prev[cat].map(q => (q.id === id ? { ...q, answer: value } : q)),
+    }));
   };
 
-  const updateNote = (sectionId: string, qid: number, text: string) => {
-    setSections(prev =>
-      prev.map(sec =>
-        sec.id === sectionId
-          ? {
-              ...sec,
-              questions: sec.questions.map(q => (q.id === qid ? { ...q, note: text } : q)),
-            }
-          : sec
-      )
-    );
+  const updateNote = (cat: string, id: number, text: string) => {
+    setQuestions(prev => ({
+      ...prev,
+      [cat]: prev[cat].map(q => (q.id === id ? { ...q, note: text } : q)),
+    }));
   };
 
-  const addPhoto = (sectionId: string, qid: number) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = e => {
-      const target = e.target as HTMLInputElement;
-      if (target.files && target.files[0]) {
-        const reader = new FileReader();
-        reader.onload = ev => {
-          const base64 = ev.target?.result as string;
-          setSections(prev =>
-            prev.map(sec =>
-              sec.id === sectionId
-                ? {
-                    ...sec,
-                    questions: sec.questions.map(q =>
-                      q.id === qid ? { ...q, images: [...(q.images || []), base64] } : q
-                    ),
-                  }
-                : sec
-            )
-          );
-        };
-        reader.readAsDataURL(target.files[0]);
-      }
+  const addImageToQuestion = (cat: string, id: number, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setQuestions(prev => ({
+        ...prev,
+        [cat]: prev[cat].map(q =>
+          q.id === id ? { ...q, images: [...(q.images || []), reader.result as string] } : q
+        ),
+      }));
     };
-    input.click();
+    reader.readAsDataURL(file);
   };
 
   const generatePDF = () => {
-    const doc = new jsPDF('p', 'mm', 'a4');
+    const doc = new jsPDF('l', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 10;
+    let y = 20;
+
     doc.addFileToVFS('Roboto-Regular.ttf', font);
     doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
     doc.setFont('Roboto');
 
-    let y = 15;
+    // --- Nagłówek ---
+    doc.setFontSize(18);
+    doc.text('Raport Audytu', pageWidth / 2, y, { align: 'center' });
+    y += 10;
+    doc.setFontSize(14);
+    doc.text('Tabela zbiorcza', pageWidth / 2, y, { align: 'center' });
+    y += 10;
 
-    // Nagłówek
-    doc.setFontSize(24);
-    doc.text('Raport Audytu', 105, y, { align: 'center' });
-    y += 15;
+    // --- Tabela główna ---
+    const startX = margin;
+    const colWidth = 45;
+    const baseRowHeight = 12;
+
     doc.setFontSize(12);
-    doc.text(`Data: ${new Date().toLocaleDateString()}`, 105, y, { align: 'center' });
-    y += 15;
-
-    // Dla każdej sekcji osobna strona
-    sections.forEach((section, si) => {
-      if (si > 0) {
-        doc.addPage();
-        y = 15;
-      }
-      doc.setFontSize(18);
-      doc.setTextColor(30, 30, 120);
-      doc.text(`Sekcja: ${section.name}`, 10, y);
-      y += 10;
-      doc.setTextColor(0, 0, 0);
-
-      section.questions.forEach((q, idx) => {
-        if (y > 250) {
-          doc.addPage();
-          y = 15;
-        }
-
-        doc.setFontSize(14);
-        doc.text(`${idx + 1}. ${q.text}`, 10, y);
-        y += 7;
-
-        const answerText =
-          q.answer === true ? 'Tak' : q.answer === false ? 'Nie' : 'Brak odpowiedzi';
-        doc.setFontSize(12);
-        doc.text(`Odpowiedź: ${answerText}`, 12, y);
-        y += 7;
-
-        if (q.note) {
-          doc.text(`Uwagi: ${q.note}`, 12, y);
-          y += 7;
-        }
-
-        q.images?.forEach(img => {
-          if (!img) return;
-          if (y + 90 > 297) {
-            doc.addPage();
-            y = 15;
-          }
-          doc.addImage(img, 'JPEG', 15, y, 180, 90);
-          y += 95;
-        });
-
-        doc.setDrawColor(200);
-        doc.setLineWidth(0.3);
-        doc.line(10, y, 200, y);
-        y += 7;
-      });
+    doc.text('Pytanie', startX, y);
+    categories.forEach((cat, i) => {
+      doc.text(cat, startX + (i + 1) * colWidth + colWidth / 2, y, { align: 'center' });
     });
+    y += baseRowHeight;
+    doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
+
+    initialQuestions.forEach((q, qi) => {
+      const wrappedQText = doc.splitTextToSize(q.text, colWidth - 4);
+      const rowHeight = Math.max(baseRowHeight, wrappedQText.length * 6 + 4);
+
+      doc.text(wrappedQText, startX + 2, y + 7);
+
+      categories.forEach((cat, ci) => {
+        const qData = questions[cat][qi];
+        const ansText = qData.answer === true ? 'TAK' : qData.answer === false ? 'NIE' : '';
+        const centerX = startX + (ci + 1) * colWidth + colWidth / 2;
+
+        if (ansText === 'TAK') doc.setTextColor(0, 150, 0);
+        else if (ansText === 'NIE') doc.setTextColor(200, 0, 0);
+        else doc.setTextColor(0, 0, 0);
+
+        doc.text(ansText, centerX, y + 7, { align: 'center' });
+      });
+
+      doc.setTextColor(0, 0, 0);
+      y += rowHeight;
+      doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
+    });
+
+    for (let i = 0; i <= categories.length + 1; i++) {
+      const xPos = startX + i * colWidth;
+      doc.line(xPos, 20 + baseRowHeight, xPos, y);
+    }
+
+    // --- Szczegóły pytań poniżej tabeli ---
+    y += 15;
+    doc.setFontSize(14);
+    doc.text('Szczegóły pytań', pageWidth / 2, y, { align: 'center' });
+    y += 8;
+
+    for (const cat of categories) {
+      doc.setFontSize(16);
+      doc.setTextColor(30, 60, 100);
+      if (y + 8 > pageHeight - margin) { doc.addPage(); y = margin; }
+      doc.text(`Zakład: ${cat}`, margin, y);
+      y += 8;
+
+      let counter = 1;
+      for (const q of questions[cat]) {
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+
+        // 1️⃣ Pytanie
+        const questionLines = doc.splitTextToSize(`${counter}. Pytanie: ${q.text}`, pageWidth - 2 * margin);
+        for (const line of questionLines) {
+          if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
+          doc.text(line, margin, y);
+          y += 6;
+        }
+
+        // 2️⃣ Odpowiedź
+        const ansText = q.answer === true ? 'TAK' : q.answer === false ? 'NIE' : 'BRAK';
+        if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
+        doc.text(`   Odpowiedź: ${ansText}`, margin, y);
+        y += 6;
+
+        // 3️⃣ Uwagi
+        if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
+        doc.text(`   Uwagi:`, margin, y);
+        y += 6;
+        const noteLines = doc.splitTextToSize(q.note || '-', pageWidth - 2 * margin);
+        for (const line of noteLines) {
+          if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
+          doc.text(line, margin + 5, y);
+          y += 6;
+        }
+
+        // 4️⃣ Zdjęcia
+        if (q.images && q.images.length > 0) {
+          for (const img of q.images) {
+            if (y + 55 > pageHeight - margin) { doc.addPage(); y = margin; }
+            doc.text(`   Zdjęcia:`, margin, y);
+            y += 5;
+            doc.addImage(img, 'JPEG', margin + 5, y, 50, 50);
+            y += 55;
+          }
+        } else {
+          if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
+          doc.text(`   Zdjęcia: brak zdjęcia`, margin, y);
+          y += 6;
+        }
+
+        y += 4;
+        counter++;
+      }
+
+      y += 8;
+    }
 
     doc.save(`Raport-Audytu-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  const currentSection = sections.find(s => s.id === activeTab)!;
-
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
-      <h1>Raport Audytu</h1>
+      <h1>Audyt Maszyn</h1>
 
-      {/* Pasek zakładek */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        {sections.map(sec => (
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        {categories.map(cat => (
           <button
-            key={sec.id}
-            onClick={() => setActiveTab(sec.id)}
+            key={cat}
+            onClick={() => setActiveTab(cat)}
             style={{
-              padding: '8px 12px',
-              borderRadius: 5,
-              border: '1px solid #1976d2',
-              backgroundColor: activeTab === sec.id ? '#1976d2' : 'white',
-              color: activeTab === sec.id ? 'white' : '#1976d2',
-              fontWeight: 600,
+              padding: '8px 14px',
+              borderRadius: 6,
+              border: activeTab === cat ? '2px solid #1976d2' : '1px solid #ccc',
+              backgroundColor: activeTab === cat ? '#e3f2fd' : 'white',
               cursor: 'pointer',
             }}
           >
-            {sec.name}
+            {cat}
           </button>
         ))}
       </div>
 
-      {/* Lista 8 pytań */}
-      {currentSection.questions.map(q => (
-        <div
-          key={q.id}
-          style={{
-            marginBottom: 30,
-            borderBottom: '1px solid #ccc',
-            paddingBottom: 10,
-            backgroundColor: '#f9f9f9',
-            borderRadius: 8,
-            padding: 15,
-          }}
-        >
-          <p style={{ fontSize: 18, fontWeight: 600 }}>{q.text}</p>
+      {questions[activeTab].map(q => (
+        <div key={q.id} style={{ marginBottom: 25, borderBottom: '1px solid #ccc', paddingBottom: 10 }}>
+          <p style={{ fontSize: 18 }}>{q.text}</p>
           <div style={{ display: 'flex', gap: 20, marginBottom: 8 }}>
             <label>
-              <input
-                type="radio"
-                checked={q.answer === true}
-                onChange={() => setAnswer(activeTab, q.id, true)}
-              />{' '}
-              Tak
+              <input type="radio" checked={q.answer === true} onChange={() => setAnswer(activeTab, q.id, true)} /> Tak
             </label>
             <label>
-              <input
-                type="radio"
-                checked={q.answer === false}
-                onChange={() => setAnswer(activeTab, q.id, false)}
-              />{' '}
-              Nie
+              <input type="radio" checked={q.answer === false} onChange={() => setAnswer(activeTab, q.id, false)} /> Nie
             </label>
           </div>
           <textarea
             placeholder="Wpisz własną uwagę..."
             value={q.note}
             onChange={e => updateNote(activeTab, q.id, e.target.value)}
-            style={{
-              width: '100%',
-              padding: 10,
-              borderRadius: 5,
-              border: '1px solid #ccc',
-              minHeight: 60,
-              resize: 'vertical',
-            }}
+            style={{ width: '100%', padding: 10, borderRadius: 5, border: '1px solid #ccc', marginBottom: 8 }}
           />
-          <br />
-          <button
-            onClick={() => addPhoto(activeTab, q.id)}
-            style={{
-              marginTop: 8,
-              backgroundColor: '#1976d2',
-              color: 'white',
-              border: 'none',
-              borderRadius: 5,
-              padding: '6px 12px',
-              cursor: 'pointer',
-            }}
-          >
-            Dodaj zdjęcie
-          </button>
-          <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-            {q.images?.map((img, i) => (
-              <img
-                key={i}
-                src={img}
-                alt="zdjęcie"
-                style={{ width: 150, height: 'auto', borderRadius: 5, boxShadow: '0 0 5px #ccc' }}
-              />
-            ))}
-          </div>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={e => e.target.files && addImageToQuestion(activeTab, q.id, e.target.files[0])}
+          />
+          {q.images && q.images.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
+              {q.images.map((img, idx) => (
+                <img key={idx} src={img} alt={`q${q.id}-${idx}`} style={{ width: 80, height: 80, objectFit: 'cover', border: '1px solid #ccc' }} />
+              ))}
+            </div>
+          )}
         </div>
       ))}
 
       <button
         onClick={generatePDF}
-        style={{
-          padding: '10px 20px',
-          fontSize: 16,
-          backgroundColor: '#1976d2',
-          color: 'white',
-          border: 'none',
-          borderRadius: 5,
-          marginTop: 30,
-          cursor: 'pointer',
-        }}
+        style={{ padding: '10px 20px', fontSize: 16, backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: 5, marginTop: 20 }}
       >
         GENERUJ PDF
       </button>
