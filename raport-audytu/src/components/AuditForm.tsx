@@ -66,7 +66,7 @@ const AuditForm: React.FC = () => {
     readFile(0);
   };
 
-  // 📄 GENEROWANIE PDF
+  // 📄 PDF GENEROWANIE
   const generatePDF = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -140,7 +140,7 @@ const AuditForm: React.FC = () => {
 
       const catQuestions = questions[cat];
       for (const q of catQuestions) {
-        if (y + 80 > pageHeight - margin) {
+        if (y + pageHeight / 2 > pageHeight - margin) {
           doc.addPage();
           y = margin;
         }
@@ -153,11 +153,9 @@ const AuditForm: React.FC = () => {
 
         if (q.images && q.images.length > 0) {
           const img = q.images[0];
-          const imgWidth = pageWidth / 2; // 1/2 szerokości strony
-          const imgHeight = pageHeight / 2; // 1/2 wysokości strony
-          const imgX = (pageWidth - imgWidth) / 2; // wyśrodkowanie
-          doc.addImage(img, 'JPEG', imgX, y, imgWidth, imgHeight);
-          y += imgHeight + 10;
+          // 📌 Duże zdjęcie: 1/2 szerokości i 1/2 wysokości strony
+          doc.addImage(img, 'JPEG', margin, y, pageWidth / 2, pageHeight / 2);
+          y += pageHeight / 2 + 10;
         } else {
           doc.text('(Brak zdjęcia)', margin + 5, y);
           y += 12;
@@ -169,7 +167,7 @@ const AuditForm: React.FC = () => {
     doc.save(`Raport-Audytu-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  // 📊 EKSPORT DO EXCELA
+  // 📊 EKSPORT DO EXCELA (bez base64)
   const exportToExcel = () => {
     const data: any[] = [];
     for (const cat of categories) {
@@ -179,7 +177,7 @@ const AuditForm: React.FC = () => {
           Pytanie: q.text,
           Odpowiedź: q.answer === true ? 'TAK' : q.answer === false ? 'NIE' : '',
           Uwagi: q.note || '',
-          Zdjęcia: q.images?.length ? q.images.join(', ') : '',
+          Zdjęcia: q.images?.length ? `${q.images.length} zdjęcie(ć)` : '',
         });
       });
     }
