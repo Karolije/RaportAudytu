@@ -115,7 +115,6 @@ const AuditForm: React.FC = () => {
     doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
     doc.setFont('Roboto');
 
-    // Nagłówek
     doc.setFontSize(18);
     doc.text('Raport Audytu', pageWidth / 2, y, { align: 'center' });
     y += 10;
@@ -162,7 +161,7 @@ const AuditForm: React.FC = () => {
       doc.line(xPos, 20 + baseRowHeight, xPos, y);
     }
 
-    // Sekcje zdjęć z dużymi obrazami (1/2 strony szerokości i wysokości)
+    // Zdjęcia duże
     y += 15;
     for (const cat of categories) {
       if (y + 20 > pageHeight - margin) {
@@ -203,22 +202,29 @@ const AuditForm: React.FC = () => {
   };
 
   const exportToExcel = () => {
-    const data: any[] = [];
-    for (const cat of categories) {
-      questions[cat].forEach(q => {
-        data.push({
-          Kategoria: cat,
-          Pytanie: q.text,
-          Odpowiedź: q.answer === true ? 'TAK' : q.answer === false ? 'NIE' : '',
-        });
-      });
-    }
-
-    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
+    const wsData: any[][] = [];
+  
+    // Nagłówek
+    wsData.push(['Pytanie', ...categories]);
+  
+    // Wiersze pytań
+    initialQuestions.forEach((q, qi) => {
+      const row: any[] = [q.text];
+      categories.forEach(cat => {
+        const qData = questions[cat][qi];
+        const ansText = qData.answer === true ? 'TAK' : qData.answer === false ? 'NIE' : '';
+        row.push(ansText);
+      });
+      wsData.push(row);
+    });
+  
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+  
     XLSX.utils.book_append_sheet(wb, ws, 'Audyt');
     XLSX.writeFile(wb, `Raport-Audytu-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
+  
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
