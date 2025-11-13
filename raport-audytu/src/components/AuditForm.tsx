@@ -170,24 +170,25 @@ const AuditForm: React.FC = () => {
   // 📊 EKSPORT DO EXCELA (bez base64)
   const exportToExcel = () => {
     const data: any[] = [];
-    for (const cat of categories) {
-      questions[cat].forEach(q => {
-        data.push({
-          Kategoria: cat,
-          Pytanie: q.text,
-          Odpowiedź: q.answer === true ? 'TAK' : q.answer === false ? 'NIE' : '',
-          Uwagi: q.note || '',
-          Zdjęcia: q.images?.length ? `${q.images.length} zdjęcie(ć)` : '',
-        });
+  
+    const colHeaders = ['Pytanie', ...categories];
+  
+    // Wiersze: pytania
+    initialQuestions.forEach((q, qi) => {
+      const row: any = { Pytanie: q.text };
+      categories.forEach(cat => {
+        const ans = questions[cat][qi].answer;
+        row[cat] = ans === true ? 'TAK' : ans === false ? 'NIE' : '';
       });
-    }
-
-    const ws = XLSX.utils.json_to_sheet(data);
+      data.push(row);
+    });
+  
+    const ws = XLSX.utils.json_to_sheet(data, { header: colHeaders });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Audyt');
     XLSX.writeFile(wb, `Raport-Audytu-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
-
+  
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
       <h1>Audyt Maszyn</h1>
