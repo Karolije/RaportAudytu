@@ -24,36 +24,66 @@ const initialQuestions: Question[] = [
   { id: 8, text: 'Zalegający brud', answer: undefined, note: '', images: [] },
 ];
 
+const LOCAL_STORAGE_KEY = 'auditFormData';
+
+const loadQuestions = (): Record<string, Question[]> => {
+  const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (stored) {
+    const parsed = JSON.parse(stored);
+    if (parsed.timestamp && (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000)) {
+      return parsed.questions;
+    }
+  }
+  return Object.fromEntries(categories.map(c => [c, initialQuestions.map(q => ({ ...q }))]));
+};
+
+const saveQuestions = (questions: Record<string, Question[]>) => {
+  localStorage.setItem(
+    LOCAL_STORAGE_KEY,
+    JSON.stringify({ timestamp: Date.now(), questions })
+  );
+};
+
 const AuditForm: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('CMG.2');
-  const [questions, setQuestions] = useState<Record<string, Question[]>>(
-    Object.fromEntries(categories.map(c => [c, initialQuestions.map(q => ({ ...q }))]))
-  );
+  const [questions, setQuestions] = useState<Record<string, Question[]>>(loadQuestions());
 
   const setAnswer = (cat: string, id: number, value: boolean) => {
-    setQuestions(prev => ({
-      ...prev,
-      [cat]: prev[cat].map(q => (q.id === id ? { ...q, answer: value } : q)),
-    }));
+    setQuestions(prev => {
+      const newState = {
+        ...prev,
+        [cat]: prev[cat].map(q => (q.id === id ? { ...q, answer: value } : q)),
+      };
+      saveQuestions(newState);
+      return newState;
+    });
   };
 
   const updateNote = (cat: string, id: number, text: string) => {
-    setQuestions(prev => ({
-      ...prev,
-      [cat]: prev[cat].map(q => (q.id === id ? { ...q, note: text } : q)),
-    }));
+    setQuestions(prev => {
+      const newState = {
+        ...prev,
+        [cat]: prev[cat].map(q => (q.id === id ? { ...q, note: text } : q)),
+      };
+      saveQuestions(newState);
+      return newState;
+    });
   };
 
   const addImageToQuestion = (cat: string, id: number, files: FileList) => {
     const newImages: string[] = [];
     const readFile = (index: number) => {
       if (index >= files.length) {
-        setQuestions(prev => ({
-          ...prev,
-          [cat]: prev[cat].map(q =>
-            q.id === id ? { ...q, images: [...(q.images ?? []), ...newImages] } : q
-          ),
-        }));
+        setQuestions(prev => {
+          const newState = {
+            ...prev,
+            [cat]: prev[cat].map(q =>
+              q.id === id ? { ...q, images: [...(q.images ?? []), ...newImages] } : q
+            ),
+          };
+          saveQuestions(newState);
+          return newState;
+        });
         return;
       }
       const reader = new FileReader();
@@ -66,7 +96,14 @@ const AuditForm: React.FC = () => {
     readFile(0);
   };
 
-  // 📄 PDF GENEROWANIE
+  const clearForm = () => {
+    const cleared = Object.fromEntries(
+      categories.map(c => [c, initialQuestions.map(q => ({ ...q }))])
+    );
+    setQuestions(cleared);
+    saveQuestions(cleared);
+  };
+
   const generatePDF = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -86,7 +123,6 @@ const AuditForm: React.FC = () => {
     doc.text('Tabela zbiorcza', pageWidth / 2, y, { align: 'center' });
     y += 10;
 
-    // --- TABELA ---
     const startX = margin;
     const colWidth = 45;
     const baseRowHeight = 18;
@@ -126,7 +162,7 @@ const AuditForm: React.FC = () => {
       doc.line(xPos, 20 + baseRowHeight, xPos, y);
     }
 
-    // --- SEKCJE ZDJĘĆ ---
+    // Sekcje zdjęć z dużymi obrazami (1/2 strony szerokości i wysokości)
     y += 15;
     for (const cat of categories) {
       if (y + 20 > pageHeight - margin) {
@@ -153,7 +189,6 @@ const AuditForm: React.FC = () => {
 
         if (q.images && q.images.length > 0) {
           const img = q.images[0];
-          // 📌 Duże zdjęcie: 1/2 szerokości i 1/2 wysokości strony
           doc.addImage(img, 'JPEG', margin, y, pageWidth / 2, pageHeight / 2);
           y += pageHeight / 2 + 10;
         } else {
@@ -167,28 +202,24 @@ const AuditForm: React.FC = () => {
     doc.save(`Raport-Audytu-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  // 📊 EKSPORT DO EXCELA (bez base64)
   const exportToExcel = () => {
     const data: any[] = [];
-  
-    const colHeaders = ['Pytanie', ...categories];
-  
-    // Wiersze: pytania
-    initialQuestions.forEach((q, qi) => {
-      const row: any = { Pytanie: q.text };
-      categories.forEach(cat => {
-        const ans = questions[cat][qi].answer;
-        row[cat] = ans === true ? 'TAK' : ans === false ? 'NIE' : '';
+    for (const cat of categories) {
+      questions[cat].forEach(q => {
+        data.push({
+          Kategoria: cat,
+          Pytanie: q.text,
+          Odpowiedź: q.answer === true ? 'TAK' : q.answer === false ? 'NIE' : '',
+        });
       });
-      data.push(row);
-    });
-  
-    const ws = XLSX.utils.json_to_sheet(data, { header: colHeaders });
+    }
+
+    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Audyt');
     XLSX.writeFile(wb, `Raport-Audytu-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
-  
+
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
       <h1>Audyt Maszyn</h1>
@@ -256,6 +287,12 @@ const AuditForm: React.FC = () => {
           style={{ padding: '10px 20px', fontSize: 16, backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: 5 }}
         >
           EKSPORTUJ EXCEL
+        </button>
+        <button
+          onClick={clearForm}
+          style={{ padding: '10px 20px', fontSize: 16, backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: 5 }}
+        >
+          WYCZYŚĆ FORMULARZ
         </button>
       </div>
     </div>
