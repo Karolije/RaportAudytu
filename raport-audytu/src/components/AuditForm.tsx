@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
 import font from '../fonts/Roboto-Regular-normal';
 
 interface Question {
@@ -43,19 +44,29 @@ const AuditForm: React.FC = () => {
     }));
   };
 
-  const addImageToQuestion = (cat: string, id: number, file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      setQuestions(prev => ({
-        ...prev,
-        [cat]: prev[cat].map(q =>
-          q.id === id ? { ...q, images: [...(q.images || []), reader.result as string] } : q
-        ),
-      }));
+  const addImageToQuestion = (cat: string, id: number, files: FileList) => {
+    const newImages: string[] = [];
+    const readFile = (index: number) => {
+      if (index >= files.length) {
+        setQuestions(prev => ({
+          ...prev,
+          [cat]: prev[cat].map(q =>
+            q.id === id ? { ...q, images: [...(q.images ?? []), ...newImages] } : q
+          ),
+        }));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        newImages.push(reader.result as string);
+        readFile(index + 1);
+      };
+      reader.readAsDataURL(files[index]);
     };
-    reader.readAsDataURL(file);
+    readFile(0);
   };
 
+  // 📄 GENEROWANIE PDF
   const generatePDF = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -67,7 +78,7 @@ const AuditForm: React.FC = () => {
     doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
     doc.setFont('Roboto');
 
-    // --- Nagłówek ---
+    // Nagłówek
     doc.setFontSize(18);
     doc.text('Raport Audytu', pageWidth / 2, y, { align: 'center' });
     y += 10;
@@ -75,10 +86,10 @@ const AuditForm: React.FC = () => {
     doc.text('Tabela zbiorcza', pageWidth / 2, y, { align: 'center' });
     y += 10;
 
-    // --- Tabela główna ---
+    // --- TABELA ---
     const startX = margin;
     const colWidth = 45;
-    const baseRowHeight = 12;
+    const baseRowHeight = 18;
 
     doc.setFontSize(12);
     doc.text('Pytanie', startX, y);
@@ -90,8 +101,7 @@ const AuditForm: React.FC = () => {
 
     initialQuestions.forEach((q, qi) => {
       const wrappedQText = doc.splitTextToSize(q.text, colWidth - 4);
-      const rowHeight = Math.max(baseRowHeight, wrappedQText.length * 6 + 4);
-
+      const rowHeight = Math.max(baseRowHeight, wrappedQText.length * 7 + 4);
       doc.text(wrappedQText, startX + 2, y + 7);
 
       categories.forEach((cat, ci) => {
@@ -116,72 +126,68 @@ const AuditForm: React.FC = () => {
       doc.line(xPos, 20 + baseRowHeight, xPos, y);
     }
 
-    // --- Szczegóły pytań poniżej tabeli ---
+    // --- SEKCJE ZDJĘĆ ---
     y += 15;
-    doc.setFontSize(14);
-    doc.text('Szczegóły pytań', pageWidth / 2, y, { align: 'center' });
-    y += 8;
-
     for (const cat of categories) {
+      if (y + 20 > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
       doc.setFontSize(16);
-      doc.setTextColor(30, 60, 100);
-      if (y + 8 > pageHeight - margin) { doc.addPage(); y = margin; }
+      doc.setTextColor(20, 60, 120);
       doc.text(`Zakład: ${cat}`, margin, y);
-      y += 8;
+      y += 10;
 
-      let counter = 1;
-      for (const q of questions[cat]) {
+      const catQuestions = questions[cat];
+      for (const q of catQuestions) {
+        if (y + 80 > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+        }
+
         doc.setFontSize(12);
         doc.setTextColor(0, 0, 0);
+        const qLines = doc.splitTextToSize(`• ${q.text}`, pageWidth - 2 * margin);
+        doc.text(qLines, margin, y);
+        y += 8;
 
-        // 1️⃣ Pytanie
-        const questionLines = doc.splitTextToSize(`${counter}. Pytanie: ${q.text}`, pageWidth - 2 * margin);
-        for (const line of questionLines) {
-          if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
-          doc.text(line, margin, y);
-          y += 6;
-        }
-
-        // 2️⃣ Odpowiedź
-        const ansText = q.answer === true ? 'TAK' : q.answer === false ? 'NIE' : 'BRAK';
-        if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
-        doc.text(`   Odpowiedź: ${ansText}`, margin, y);
-        y += 6;
-
-        // 3️⃣ Uwagi
-        if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
-        doc.text(`   Uwagi:`, margin, y);
-        y += 6;
-        const noteLines = doc.splitTextToSize(q.note || '-', pageWidth - 2 * margin);
-        for (const line of noteLines) {
-          if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
-          doc.text(line, margin + 5, y);
-          y += 6;
-        }
-
-        // 4️⃣ Zdjęcia
         if (q.images && q.images.length > 0) {
-          for (const img of q.images) {
-            if (y + 55 > pageHeight - margin) { doc.addPage(); y = margin; }
-            doc.text(`   Zdjęcia:`, margin, y);
-            y += 5;
-            doc.addImage(img, 'JPEG', margin + 5, y, 50, 50);
-            y += 55;
-          }
+          const img = q.images[0];
+          const imgWidth = pageWidth / 2; // 1/2 szerokości strony
+          const imgHeight = pageHeight / 2; // 1/2 wysokości strony
+          const imgX = (pageWidth - imgWidth) / 2; // wyśrodkowanie
+          doc.addImage(img, 'JPEG', imgX, y, imgWidth, imgHeight);
+          y += imgHeight + 10;
         } else {
-          if (y + 6 > pageHeight - margin) { doc.addPage(); y = margin; }
-          doc.text(`   Zdjęcia: brak zdjęcia`, margin, y);
-          y += 6;
+          doc.text('(Brak zdjęcia)', margin + 5, y);
+          y += 12;
         }
-
-        y += 4;
-        counter++;
       }
-
-      y += 8;
+      y += 10;
     }
 
     doc.save(`Raport-Audytu-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  // 📊 EKSPORT DO EXCELA
+  const exportToExcel = () => {
+    const data: any[] = [];
+    for (const cat of categories) {
+      questions[cat].forEach(q => {
+        data.push({
+          Kategoria: cat,
+          Pytanie: q.text,
+          Odpowiedź: q.answer === true ? 'TAK' : q.answer === false ? 'NIE' : '',
+          Uwagi: q.note || '',
+          Zdjęcia: q.images?.length ? q.images.join(', ') : '',
+        });
+      });
+    }
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Audyt');
+    XLSX.writeFile(wb, `Raport-Audytu-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   return (
@@ -226,7 +232,8 @@ const AuditForm: React.FC = () => {
           <input
             type="file"
             accept="image/*"
-            onChange={e => e.target.files && addImageToQuestion(activeTab, q.id, e.target.files[0])}
+            multiple
+            onChange={e => e.target.files && addImageToQuestion(activeTab, q.id, e.target.files)}
           />
           {q.images && q.images.length > 0 && (
             <div style={{ display: 'flex', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
@@ -238,12 +245,20 @@ const AuditForm: React.FC = () => {
         </div>
       ))}
 
-      <button
-        onClick={generatePDF}
-        style={{ padding: '10px 20px', fontSize: 16, backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: 5, marginTop: 20 }}
-      >
-        GENERUJ PDF
-      </button>
+      <div style={{ display: 'flex', gap: 15, marginTop: 30 }}>
+        <button
+          onClick={generatePDF}
+          style={{ padding: '10px 20px', fontSize: 16, backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: 5 }}
+        >
+          GENERUJ PDF
+        </button>
+        <button
+          onClick={exportToExcel}
+          style={{ padding: '10px 20px', fontSize: 16, backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: 5 }}
+        >
+          EKSPORTUJ EXCEL
+        </button>
+      </div>
     </div>
   );
 };
