@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import font from '../fonts/Roboto-Regular-normal';
@@ -8,20 +8,23 @@ interface Question {
   text: string;
   answer?: boolean;
   note?: string;
+}
+
+interface QuestionWithImages extends Question {
   images?: string[];
 }
 
 const categories = ['CMG.2', 'CMG.3', 'LWN', 'CMG.5', 'CMG.6'];
 
 const initialQuestions: Question[] = [
-  { id: 1, text: 'Zaleganie ścinek pod piłą', answer: undefined, note: '', images: [] },
-  { id: 2, text: 'Zapylenie maszyn produkcja', answer: undefined, note: '', images: [] },
-  { id: 3, text: 'Zapylenie maszyn UR', answer: undefined, note: '', images: [] },
-  { id: 4, text: 'Nagromadzenie logów odpadowych w maszynie', answer: undefined, note: '', images: [] },
-  { id: 5, text: 'Strefy p.poż produkcja', answer: undefined, note: '', images: [] },
-  { id: 6, text: 'Strefy p.poż UR', answer: undefined, note: '', images: [] },
-  { id: 7, text: 'Prowizorki na maszynie', answer: undefined, note: '', images: [] },
-  { id: 8, text: 'Zalegający brud', answer: undefined, note: '', images: [] },
+  { id: 1, text: 'Zaleganie ścinek pod piłą' },
+  { id: 2, text: 'Zapylenie maszyn produkcja' },
+  { id: 3, text: 'Zapylenie maszyn UR' },
+  { id: 4, text: 'Nagromadzenie logów odpadowych w maszynie' },
+  { id: 5, text: 'Strefy p.poż produkcja' },
+  { id: 6, text: 'Strefy p.poż UR' },
+  { id: 7, text: 'Prowizorki na maszynie' },
+  { id: 8, text: 'Zalegający brud' },
 ];
 
 const LOCAL_STORAGE_KEY = 'auditFormData';
@@ -34,56 +37,61 @@ const loadQuestions = (): Record<string, Question[]> => {
       return parsed.questions;
     }
   }
-  return Object.fromEntries(categories.map(c => [c, initialQuestions.map(q => ({ ...q }))]));
+  return Object.fromEntries(
+    categories.map(cat => [cat, initialQuestions.map(q => ({ ...q }))])
+  );
 };
 
 const saveQuestions = (questions: Record<string, Question[]>) => {
-  localStorage.setItem(
-    LOCAL_STORAGE_KEY,
-    JSON.stringify({ timestamp: Date.now(), questions })
+  // zapisujemy TYLKO answer i note
+  const smallQuestions = Object.fromEntries(
+    Object.entries(questions).map(([cat, qs]) => [
+      cat,
+      qs.map(q => ({ id: q.id, answer: q.answer, note: q.note }))
+    ])
   );
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ timestamp: Date.now(), questions: smallQuestions }));
 };
 
 const AuditForm: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('CMG.2');
   const [questions, setQuestions] = useState<Record<string, Question[]>>(loadQuestions());
 
+  // Stan tylko dla zdjęć, nie zapisujemy w LS
+  const [imagesState, setImagesState] = useState<Record<string, Record<number, string[]>>>(
+    () => Object.fromEntries(categories.map(cat => [cat, {}]))
+  );
+
+  // automatycznie zapisuj odpowiedzi i notatki po zmianie
+  useEffect(() => {
+    saveQuestions(questions);
+  }, [questions]);
+
   const setAnswer = (cat: string, id: number, value: boolean) => {
-    setQuestions(prev => {
-      const newState = {
-        ...prev,
-        [cat]: prev[cat].map(q => (q.id === id ? { ...q, answer: value } : q)),
-      };
-      saveQuestions(newState);
-      return newState;
-    });
+    setQuestions(prev => ({
+      ...prev,
+      [cat]: prev[cat].map(q => (q.id === id ? { ...q, answer: value } : q)),
+    }));
   };
 
   const updateNote = (cat: string, id: number, text: string) => {
-    setQuestions(prev => {
-      const newState = {
-        ...prev,
-        [cat]: prev[cat].map(q => (q.id === id ? { ...q, note: text } : q)),
-      };
-      saveQuestions(newState);
-      return newState;
-    });
+    setQuestions(prev => ({
+      ...prev,
+      [cat]: prev[cat].map(q => (q.id === id ? { ...q, note: text } : q)),
+    }));
   };
 
   const addImageToQuestion = (cat: string, id: number, files: FileList) => {
     const newImages: string[] = [];
     const readFile = (index: number) => {
       if (index >= files.length) {
-        setQuestions(prev => {
-          const newState = {
-            ...prev,
-            [cat]: prev[cat].map(q =>
-              q.id === id ? { ...q, images: [...(q.images ?? []), ...newImages] } : q
-            ),
-          };
-          saveQuestions(newState);
-          return newState;
-        });
+        setImagesState(prev => ({
+          ...prev,
+          [cat]: {
+            ...prev[cat],
+            [id]: [...(prev[cat][id] ?? []), ...newImages]
+          }
+        }));
         return;
       }
       const reader = new FileReader();
@@ -97,11 +105,13 @@ const AuditForm: React.FC = () => {
   };
 
   const clearForm = () => {
-    const cleared = Object.fromEntries(
+    const clearedQuestions = Object.fromEntries(
       categories.map(c => [c, initialQuestions.map(q => ({ ...q }))])
     );
-    setQuestions(cleared);
-    saveQuestions(cleared);
+    const clearedImages = Object.fromEntries(categories.map(c => [c, {}]));
+    setQuestions(clearedQuestions);
+    setImagesState(clearedImages);
+    saveQuestions(clearedQuestions);
   };
 
   const generatePDF = () => {
@@ -161,7 +171,7 @@ const AuditForm: React.FC = () => {
       doc.line(xPos, 20 + baseRowHeight, xPos, y);
     }
 
-    // Zdjęcia duże
+    // Zdjęcia
     y += 15;
     for (const cat of categories) {
       if (y + 20 > pageHeight - margin) {
@@ -186,9 +196,9 @@ const AuditForm: React.FC = () => {
         doc.text(qLines, margin, y);
         y += 8;
 
-        if (q.images && q.images.length > 0) {
-          const img = q.images[0];
-          doc.addImage(img, 'JPEG', margin, y, pageWidth / 2, pageHeight / 2);
+        const qImages = imagesState[cat][q.id];
+        if (qImages && qImages.length > 0) {
+          doc.addImage(qImages[0], 'JPEG', margin, y, pageWidth / 2, pageHeight / 2);
           y += pageHeight / 2 + 10;
         } else {
           doc.text('(Brak zdjęcia)', margin + 5, y);
@@ -204,11 +214,9 @@ const AuditForm: React.FC = () => {
   const exportToExcel = () => {
     const wb = XLSX.utils.book_new();
     const wsData: any[][] = [];
-  
-    // Nagłówek
+
     wsData.push(['Pytanie', ...categories]);
-  
-    // Wiersze pytań
+
     initialQuestions.forEach((q, qi) => {
       const row: any[] = [q.text];
       categories.forEach(cat => {
@@ -218,13 +226,11 @@ const AuditForm: React.FC = () => {
       });
       wsData.push(row);
     });
-  
+
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-  
     XLSX.utils.book_append_sheet(wb, ws, 'Audyt');
     XLSX.writeFile(wb, `Raport-Audytu-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
-  
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
@@ -271,9 +277,9 @@ const AuditForm: React.FC = () => {
             multiple
             onChange={e => e.target.files && addImageToQuestion(activeTab, q.id, e.target.files)}
           />
-          {q.images && q.images.length > 0 && (
+          {imagesState[activeTab][q.id] && imagesState[activeTab][q.id].length > 0 && (
             <div style={{ display: 'flex', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
-              {q.images.map((img, idx) => (
+              {imagesState[activeTab][q.id].map((img, idx) => (
                 <img key={idx} src={img} alt={`q${q.id}-${idx}`} style={{ width: 80, height: 80, objectFit: 'cover', border: '1px solid #ccc' }} />
               ))}
             </div>
