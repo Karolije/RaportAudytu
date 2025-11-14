@@ -30,11 +30,24 @@ const loadQuestions = (): Record<string, Question[]> => {
   if (stored) {
     const parsed = JSON.parse(stored);
     if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
-      return parsed.questions;
+      // uzupełniamy tekst z initialQuestions
+      return Object.fromEntries(
+        categories.map((cat) => [
+          cat,
+          initialQuestions.map((q) => {
+            const saved = parsed.questions[cat]?.find((sq: any) => sq.id.endsWith(`-${q.id}`));
+            return {
+              ...q,
+              id: `${cat}-${q.id}`,
+              answer: saved?.answer,
+              note: saved?.note || "",
+            };
+          }),
+        ])
+      );
     }
   }
 
-  // tworzymy pytania z unikalnym ID dla każdej kategorii
   return Object.fromEntries(
     categories.map((cat) => [
       cat,
@@ -47,6 +60,7 @@ const loadQuestions = (): Record<string, Question[]> => {
     ])
   );
 };
+
 
 const saveQuestions = (questions: Record<string, Question[]>) => {
   const smallQuestions = Object.fromEntries(
@@ -287,7 +301,7 @@ const AuditForm: React.FC = () => {
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
-      <h1>Audyt Maszyn</h1>
+      <h1>Raport z audytu KRYTYCZNE</h1>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
         {categories.map((cat) => (
