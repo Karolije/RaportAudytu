@@ -122,18 +122,26 @@ const AuditForm: React.FC = () => {
 
   const clearForm = () => {
     const clearedQuestions = Object.fromEntries(
-      categories.map((c) => [c, initialQuestions.map((q) => ({ ...q }))])
+      categories.map((c) => [
+        c,
+        initialQuestions.map((q) => ({
+          ...q,
+          answer: undefined,
+          note: "", // <-- czyszczenie uwag
+        })),
+      ])
     );
-
+  
     const clearedImages = categories.reduce((acc, c) => {
       acc[c] = {};
       return acc;
     }, {} as Record<string, Record<number, string[]>>);
-
+  
     setQuestions(clearedQuestions);
     setImagesState(clearedImages);
     saveQuestions(clearedQuestions);
   };
+  
 
   const generatePDF = () => {
     const doc = new jsPDF("l", "mm", "a4");
@@ -141,100 +149,130 @@ const AuditForm: React.FC = () => {
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 10;
     let y = 20;
-
+  
     doc.addFileToVFS("Roboto-Regular.ttf", font);
     doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
     doc.setFont("Roboto");
-
+  
+    // --- Tytuł ---
     doc.setFontSize(18);
     doc.text("Raport Audytu", pageWidth / 2, y, { align: "center" });
     y += 10;
+  
     doc.setFontSize(14);
     doc.text("Tabela zbiorcza", pageWidth / 2, y, { align: "center" });
     y += 10;
-
+  
     const startX = margin;
     const colWidth = 45;
     const baseRowHeight = 18;
-
+  
+    // --- Nagłówki tabeli ---
     doc.setFontSize(12);
     doc.text("Pytanie", startX, y);
     categories.forEach((cat, i) => {
       doc.text(cat, startX + (i + 1) * colWidth + colWidth / 2, y, { align: "center" });
     });
-
     y += baseRowHeight;
     doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
-
+  
+    // --- Wiersze tabeli ---
     initialQuestions.forEach((q, qi) => {
       const wrappedQText = doc.splitTextToSize(q.text, colWidth - 4);
       const rowHeight = Math.max(baseRowHeight, wrappedQText.length * 7 + 4);
       doc.text(wrappedQText, startX + 2, y + 7);
-
+  
       categories.forEach((cat, ci) => {
         const qData = questions[cat][qi];
-        const ansText =
-          qData.answer === true ? "TAK" : qData.answer === false ? "NIE" : "";
+        const ansText = qData.answer === true ? "TAK" : qData.answer === false ? "NIE" : "";
         const centerX = startX + (ci + 1) * colWidth + colWidth / 2;
-
+  
         if (ansText === "TAK") doc.setTextColor(0, 150, 0);
         else if (ansText === "NIE") doc.setTextColor(200, 0, 0);
         else doc.setTextColor(0, 0, 0);
-
+  
         doc.text(ansText, centerX, y + 7, { align: "center" });
       });
-
+  
       doc.setTextColor(0, 0, 0);
       y += rowHeight;
       doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
     });
-
+  
     for (let i = 0; i <= categories.length + 1; i++) {
       const xPos = startX + i * colWidth;
       doc.line(xPos, 20 + baseRowHeight, xPos, y);
     }
-
-    // --- ZDJĘCIA ---
+  
+    // --- Zdjęcia i uwagi ---
     y += 15;
+    const imageWidth = (pageWidth - 3 * margin) / 2; // 2 kolumny
+    const imageHeight = 60;
+  
     for (const cat of categories) {
       if (y + 20 > pageHeight - margin) {
         doc.addPage();
         y = margin;
       }
-
+  
       doc.setFontSize(16);
       doc.setTextColor(20, 60, 120);
       doc.text(`Zakład: ${cat}`, margin, y);
       y += 10;
-
-      const catQuestions = questions[cat];
+  
+      const catQuestions = questions[cat] || [];
       for (const q of catQuestions) {
-        if (y + pageHeight / 2 > pageHeight - margin) {
-          doc.addPage();
-          y = margin;
-        }
-
+        // Nazwa pytania
+        const qLines = doc.splitTextToSize(`• ${q.text}`, pageWidth - 2 * margin);
         doc.setFontSize(12);
         doc.setTextColor(0, 0, 0);
-        const qLines = doc.splitTextToSize(`• ${q.text}`, pageWidth - 2 * margin);
         doc.text(qLines, margin, y);
-        y += 8;
-
-        const qImages = imagesState[cat][q.id];
-        if (qImages && qImages.length > 0) {
-          doc.addImage(qImages[0], "JPEG", margin, y, pageWidth / 2, pageHeight / 2);
-          y += pageHeight / 2 + 10;
+        y += qLines.length * 7 + 2;
+  
+        // Własna uwaga
+        if (q.note && q.note.trim() !== "") {
+          const noteLines = doc.splitTextToSize(`Uwaga: ${q.note}`, pageWidth - 2 * margin);
+          doc.setTextColor(100, 100, 100);
+          doc.text(noteLines, margin, y);
+          y += noteLines.length * 7 + 2;
+          doc.setTextColor(0, 0, 0);
+        }
+  
+        // Zdjęcia w 2 kolumnach
+        const qImages = imagesState[cat]?.[q.id] || [];
+        if (qImages.length > 0) {
+          let x = margin;
+          let col = 0;
+          for (const img of qImages) {
+            if (y + imageHeight > pageHeight - margin) {
+              doc.addPage();
+              y = margin;
+            }
+  
+            doc.addImage(img, "JPEG", x, y, imageWidth, imageHeight);
+            col++;
+            if (col % 2 === 0) {
+              y += imageHeight + 5;
+              x = margin;
+            } else {
+              x += imageWidth + margin;
+            }
+          }
+          if (col % 2 !== 0) y += imageHeight + 5;
         } else {
-          doc.text("(Brak zdjęcia)", margin + 5, y);
+          doc.text("(Brak zdjęcia)", margin, y);
           y += 12;
         }
+  
+        y += 5;
       }
       y += 10;
     }
-
+  
     doc.save(`Raport-Audytu-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
-
+  
+  
   const exportToExcel = () => {
     const wb = XLSX.utils.book_new();
     const wsData: any[][] = [];
@@ -387,31 +425,7 @@ const AuditForm: React.FC = () => {
 
 
 
-          {imagesState[activeTab][q.id] &&
-            imagesState[activeTab][q.id].length > 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  marginTop: 5,
-                  flexWrap: "wrap",
-                }}
-              >
-                {imagesState[activeTab][q.id].map((img, idx) => (
-                  <img
-                    key={idx}
-                    src={img}
-                    alt={`q${q.id}-${idx}`}
-                    style={{
-                      width: 80,
-                      height: 80,
-                      objectFit: "cover",
-                      border: "1px solid #ccc",
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+       
         </div>
       ))}
 
