@@ -1,32 +1,20 @@
-import React from "react";
+import React from 'react';
 
-interface ImagePreviewListProps {
-  images?: string[]; // tablica stringów lub undefined
-}
+type Props = {
+  images?: string[];
+};
 
-export const ImagePreviewList: React.FC<ImagePreviewListProps> = ({ images }) => {
-  if (!images?.length) return null;
+export const ImagePreviewList: React.FC<Props> = ({ images }) => {
+  if (!images || images.length === 0) return null;
 
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 10,
-        marginTop: 5,
-        flexWrap: "wrap",
-      }}
-    >
-      {images.map((img, idx) => (
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 5 }}>
+      {images.map((url, index) => (
         <img
-          key={idx}
-          src={img}
-          alt={`img-${idx}`}
-          style={{
-            width: 80,
-            height: 80,
-            objectFit: "cover",
-            border: "1px solid #ccc",
-          }}
+          key={index}
+          src={url}
+          alt={`preview-${index}`}
+          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 5 }}
         />
       ))}
     </div>

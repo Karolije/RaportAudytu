@@ -1,210 +1,114 @@
-import React, { useEffect, useState } from "react";
-import {
-  categories,
-  initialQuestions,
-  LOCAL_STORAGE_KEY,
-  Question,
-} from "../data/questions";
-import { generatePDF } from "../utils/generatePDF";
-import { exportToExcel } from "../utils/exportToExcel";
-import { Tabs } from "./Tabs";
-import { QuestionItem } from "./QuestionItem";
-
-type ImagesState = Record<string, Record<string, string[]>>;
-type QuestionsState = Record<string, Question[]>;
-
-const loadQuestions = (): QuestionsState => {
-  const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-  if (stored) {
-    const parsed = JSON.parse(stored);
-    if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
-      return Object.fromEntries(
-        categories.map((cat) => [
-          cat,
-          initialQuestions.map((q) => {
-            const saved = parsed.questions[cat]?.find((sq: any) =>
-              sq.id.endsWith(`-${q.id}`)
-            );
-            return {
-              ...q,
-              id: `${cat}-${q.id}`,
-              answer: saved?.answer,
-              note: saved?.note || "",
-            } as Question;
-          }),
-        ])
-      ) as QuestionsState;
-    }
-  }
-
-  return Object.fromEntries(
-    categories.map((cat) => [
-      cat,
-      initialQuestions.map((q) => ({
-        ...q,
-        id: `${cat}-${q.id}`,
-        answer: undefined,
-        note: "",
-      })),
-    ])
-  ) as QuestionsState;
-};
-
-const saveQuestions = (questions: QuestionsState) => {
-  const smallQuestions = Object.fromEntries(
-    Object.entries(questions).map(([cat, qs]) => [
-      cat,
-      qs.map((q) => ({ id: q.id, answer: q.answer, note: q.note })),
-    ])
-  );
-
-  localStorage.setItem(
-    LOCAL_STORAGE_KEY,
-    JSON.stringify({ timestamp: Date.now(), questions: smallQuestions })
-  );
-};
+// AuditForm.tsx
+import React, { useEffect, useState } from 'react';
+import { categories, initialQuestions, Question } from '../data/questions';
+import { Tabs } from './Tabs';
+import { QuestionItem } from './QuestionItem';
+import { QuestionsState, ImagesState } from './types';
+import { loadAuditData, saveAnswer, uploadImage } from '../supabaseAudit';
+import { generatePDF } from '../utils/generatePDF';
 
 export const AuditForm: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>("CMG.2");
-  const [questions, setQuestions] = useState<QuestionsState>(loadQuestions());
+  const auditId = 1; // liczba zgodnie z smallint
+  const [activeTab, setActiveTab] = useState<string>(categories[0]);
 
-  const [imagesState, setImagesState] = useState<ImagesState>(() =>
-    categories.reduce((acc, c) => ({ ...acc, [c]: {} }), {} as ImagesState)
+  // inicjalizacja pytań na start
+  const [questions, setQuestions] = useState<QuestionsState>(
+    Object.fromEntries(
+      categories.map(cat => [
+        cat,
+        initialQuestions.map(q => ({ ...q })), // kopia pytań
+      ])
+    )
   );
 
+  const [imagesState, setImagesState] = useState<ImagesState>({});
+
+  // załaduj dane z Supabase, jeśli są
   useEffect(() => {
-    saveQuestions(questions);
-  }, [questions]);
+    loadAuditData(auditId).then(({ questions: loadedQuestions, images }) => {
+      const updatedQuestions: QuestionsState = { ...questions };
+      categories.forEach(cat => {
+        if (loadedQuestions[cat]?.length) {
+          updatedQuestions[cat] = loadedQuestions[cat].map(q => ({ ...q }));
+        }
+      });
+      setQuestions(updatedQuestions);
+      setImagesState(images);
+    });
+  }, []);
 
-  // <-- TU: wartość answer ma typ boolean | undefined
-  const setAnswer = (cat: string, id: string, value: boolean | undefined) => {
-    setQuestions((prev: QuestionsState): QuestionsState => ({
+  const setAnswerFn = (cat: string, id: string, value: boolean | undefined) => {
+    setQuestions(prev => ({
       ...prev,
-      [cat]: prev[cat].map((q) =>
-        q.id === id ? ({ ...q, answer: value } as Question) : q
-      ),
+      [cat]: prev[cat]?.map(q => (q.id === id ? { ...q, answer: value } : q)) || [],
     }));
   };
 
-  const updateNote = (cat: string, id: string, text: string) => {
-    setQuestions((prev: QuestionsState): QuestionsState => ({
+  const updateNoteFn = (cat: string, id: string, note: string) => {
+    setQuestions(prev => ({
       ...prev,
-      [cat]: prev[cat].map((q) =>
-        q.id === id ? ({ ...q, note: text } as Question) : q
-      ),
+      [cat]: prev[cat]?.map(q => (q.id === id ? { ...q, note } : q)) || [],
     }));
   };
 
-  const addImageToQuestion = (cat: string, id: string, files: File[]) => {
-    const fileArray = Array.from(files); // <-- konwertujemy FileList na tablicę, jeśli by było FileList
-    const newImages: string[] = [];
-  
-    const readFile = (index: number) => {
-      if (index >= fileArray.length) {
-        setImagesState((prev) => {
-          const catCopy: Record<string, string[]> = { ...(prev[cat] || {}) };
-          const oldImgs = catCopy[id] ? [...catCopy[id]] : [];
-          catCopy[id] = [...oldImgs, ...newImages];
-          return { ...prev, [cat]: catCopy };
-        });
-        return;
-      }
-  
-      const reader = new FileReader();
-      reader.onload = () => {
-        newImages.push(reader.result as string);
-        readFile(index + 1);
-      };
-      reader.readAsDataURL(fileArray[index]);
-    };
-  
-    readFile(0);
+  const addImageFn = async (cat: string, id: string, files: FileList) => {
+    const uploadedUrls: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const url = await uploadImage(auditId, cat, id, files[i]);
+      uploadedUrls.push(url);
+    }
+
+    setImagesState(prev => ({
+      ...prev,
+      [cat]: {
+        ...(prev[cat] || {}),
+        [id]: [...(prev[cat]?.[id] || []), ...uploadedUrls],
+      },
+    }));
+
+    const question = questions[cat]?.find(q => q.id === id);
+    if (question) {
+      question.images = [...(question.images || []), ...uploadedUrls];
+      await saveAnswer(auditId, cat, question);
+    }
   };
-  
 
-  const clearForm = () => {
-    const cleared = Object.fromEntries(
-      categories.map((c) => [
-        c,
-        initialQuestions.map((q) => ({
-          ...q,
-          id: `${c}-${q.id}`,
-          answer: undefined,
-          note: "",
-        })),
-      ])
-    ) as QuestionsState;
-
-    setQuestions(cleared);
-    setImagesState(
-      categories.reduce((acc, c) => ({ ...acc, [c]: {} }), {} as ImagesState)
-    );
-    saveQuestions(cleared);
+  const handleGeneratePDF = () => {
+    generatePDF(questions, imagesState);
   };
 
   return (
-    <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
-      <h1>Raport z audytu KRYTYCZNE</h1>
-
+    <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
+      <h1>Raport z audytu</h1>
       <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {questions[activeTab].map((q) => (
+      {questions[activeTab]?.map((q: Question) => (
         <QuestionItem
           key={q.id}
           q={q}
           activeTab={activeTab}
-          setAnswer={setAnswer}
-          updateNote={updateNote}
-          addImageToQuestion={addImageToQuestion}
+          setAnswer={setAnswerFn}
+          updateNote={updateNoteFn}
+          addImageToQuestion={(cat, id, files) => addImageFn(cat, id, files)}
           images={imagesState[activeTab]?.[q.id]}
         />
       ))}
 
-      <div style={{ display: "flex", gap: 15, marginTop: 30 }}>
-        <button
-          onClick={() => generatePDF(questions, imagesState)}
-          style={{
-            padding: "10px 20px",
-            fontSize: 16,
-            backgroundColor: "#1976d2",
-            color: "white",
-            border: "none",
-            borderRadius: 5,
-          }}
-        >
-          GENERUJ PDF
-        </button>
-
-        <button
-          onClick={() => exportToExcel(questions)}
-          style={{
-            padding: "10px 20px",
-            fontSize: 16,
-            backgroundColor: "#2e7d32",
-            color: "white",
-            border: "none",
-            borderRadius: 5,
-          }}
-        >
-          EKSPORTUJ EXCEL
-        </button>
-
-        <button
-          onClick={clearForm}
-          style={{
-            padding: "10px 20px",
-            fontSize: 16,
-            backgroundColor: "#d32f2f",
-            color: "white",
-            border: "none",
-            borderRadius: 5,
-          }}
-        >
-          WYCZYŚĆ FORMULARZ
-        </button>
-      </div>
+      <button
+        style={{
+          marginTop: 20,
+          padding: '10px 20px',
+          fontSize: 16,
+          backgroundColor: '#1464f4',
+          color: 'white',
+          border: 'none',
+          borderRadius: 6,
+          cursor: 'pointer',
+        }}
+        onClick={handleGeneratePDF}
+      >
+        Pobierz PDF
+      </button>
     </div>
   );
 };
-
-export default AuditForm;

@@ -1,34 +1,24 @@
-import React from "react";
+import React, { ChangeEvent } from 'react';
 
-interface ImageUploaderProps {
-  onUpload: (files: File[]) => void;
-}
+type Props = {
+  onUpload: (files: FileList) => void;
+};
 
-export const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload }) => {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      onUpload(Array.from(e.target.files)); // konwertujemy FileList na tablicę
+export const ImageUploader: React.FC<Props> = ({ onUpload }) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      onUpload(e.target.files);
+      e.target.value = ''; // reset
     }
   };
 
   return (
-    <label
-      style={{
-        display: "inline-block",
-        padding: "6px 12px",
-        backgroundColor: "#1976d2",
-        color: "white",
-        borderRadius: 5,
-        cursor: "pointer",
-      }}
-    >
-      Dodaj pliki
-      <input
-        type="file"
-        multiple
-        style={{ display: "none" }}
-        onChange={handleChange}
-      />
-    </label>
+    <input
+      type="file"
+      multiple
+      accept="image/*"
+      onChange={handleChange}
+      style={{ marginBottom: 8 }}
+    />
   );
 };

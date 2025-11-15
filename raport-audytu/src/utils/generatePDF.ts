@@ -1,3 +1,4 @@
+// generatePDF.ts
 import jsPDF from "jspdf";
 import font from "../fonts/Roboto-Regular-normal";
 import { categories, initialQuestions } from "../data/questions";
@@ -9,10 +10,12 @@ export const generatePDF = async (questions: any, imagesState: any) => {
   const margin = 10;
   let y = 20;
 
+  // dodaj font
   doc.addFileToVFS("Roboto-Regular.ttf", font);
   doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
   doc.setFont("Roboto");
 
+  // nagłówek
   doc.setFontSize(18);
   doc.text("Raport Audytu", pageWidth / 2, y, { align: "center" });
   y += 10;
@@ -21,6 +24,7 @@ export const generatePDF = async (questions: any, imagesState: any) => {
   doc.text("Tabela zbiorcza", pageWidth / 2, y, { align: "center" });
   y += 10;
 
+  // tabela odpowiedzi
   const startX = margin;
   const colWidth = 45;
   const baseRowHeight = 18;
@@ -38,9 +42,9 @@ export const generatePDF = async (questions: any, imagesState: any) => {
     const rowHeight = Math.max(baseRowHeight, wrappedQText.length * 7 + 4);
     doc.text(wrappedQText, startX + 2, y + 7);
 
-    categories.forEach((cat) => {
-      const qData = questions[cat][qi];
-      const ansText = qData.answer === true ? "TAK" : qData.answer === false ? "NIE" : "";
+    categories.forEach(cat => {
+      const qData = questions[cat]?.[qi];
+      const ansText = qData?.answer === true ? "TAK" : qData?.answer === false ? "NIE" : "";
       const centerX = startX + (categories.indexOf(cat) + 1) * colWidth + colWidth / 2;
 
       if (ansText === "TAK") doc.setTextColor(0, 150, 0);
@@ -62,7 +66,7 @@ export const generatePDF = async (questions: any, imagesState: any) => {
 
   y += 15;
 
-  // Funkcja pomocnicza do wczytania obrazka jako Promise
+  // funkcja do wczytania obrazka jako Promise
   const loadImage = (src: string) =>
     new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
@@ -71,7 +75,7 @@ export const generatePDF = async (questions: any, imagesState: any) => {
       img.onerror = reject;
     });
 
-  // Sekcja pytań z obrazkami
+  // sekcja pytań z obrazkami
   for (const cat of categories) {
     if (y + 20 > pageHeight - margin) {
       doc.addPage();
@@ -83,7 +87,8 @@ export const generatePDF = async (questions: any, imagesState: any) => {
     doc.text(`Zakład: ${cat}`, margin, y);
     y += 10;
 
-    const catQuestions = questions[cat] || [];
+    const catQuestions = questions[cat] || initialQuestions.map(q => ({ ...q }));
+
     for (const q of catQuestions) {
       const qLines = doc.splitTextToSize(`• ${q.text}`, pageWidth - 2 * margin);
       doc.setFontSize(12);
@@ -104,12 +109,10 @@ export const generatePDF = async (questions: any, imagesState: any) => {
         for (const imgSrc of qImages) {
           try {
             const img = await loadImage(imgSrc);
-
-            // naturalny rozmiar w mm (1 px ≈ 0.264583 mm)
             let imgWidthMm = img.width * 0.264583;
             let imgHeightMm = img.height * 0.264583;
 
-            // jeśli szerokość większa niż strona - skalujemy do szerokości
+            // skalowanie jeśli za duży obrazek
             if (imgWidthMm > pageWidth - 2 * margin) {
               const scale = (pageWidth - 2 * margin) / imgWidthMm;
               imgWidthMm *= scale;
