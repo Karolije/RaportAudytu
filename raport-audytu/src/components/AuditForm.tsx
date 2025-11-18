@@ -1,4 +1,3 @@
-// AuditForm.tsx
 import React, { useEffect, useState } from 'react';
 import { categories, initialQuestions, Question } from '../data/questions';
 import { Tabs } from './Tabs';
@@ -8,53 +7,81 @@ import { loadAuditData, saveAnswer, uploadImage } from '../supabaseAudit';
 import { generatePDF } from '../utils/generatePDF';
 
 export const AuditForm: React.FC = () => {
-  const auditId = 1; // liczba zgodnie z smallint
+  // Generujemy unikalny auditId przy tworzeniu nowego audytu
+  const [auditId] = useState(() => Math.floor(Math.random() * 100000));
+
   const [activeTab, setActiveTab] = useState<string>(categories[0]);
-
-  // inicjalizacja pytań na start
-  const [questions, setQuestions] = useState<QuestionsState>(
-    Object.fromEntries(
-      categories.map(cat => [
-        cat,
-        initialQuestions.map(q => ({ ...q })), // kopia pytań
-      ])
-    )
-  );
-
+  const [questions, setQuestions] = useState<QuestionsState>({});
   const [imagesState, setImagesState] = useState<ImagesState>({});
 
-  // załaduj dane z Supabase, jeśli są
+  // ---------------------- LOAD DATA ----------------------
   useEffect(() => {
-    loadAuditData(auditId).then(({ questions: loadedQuestions, images }) => {
-      const updatedQuestions: QuestionsState = { ...questions };
+    const load = async () => {
+      const { questions: loadedQuestions, images: loadedImages } = await loadAuditData(auditId);
+
+      const fullQuestions: QuestionsState = {};
+      const fullImages: ImagesState = {};
+
       categories.forEach(cat => {
-        if (loadedQuestions[cat]?.length) {
-          updatedQuestions[cat] = loadedQuestions[cat].map(q => ({ ...q }));
-        }
+        // Nadawanie unikalnych question_id dla każdego pytania w tej kategorii
+        fullQuestions[cat] = initialQuestions.map((q, index) => {
+          const loadedQ = loadedQuestions[cat]?.find(lq => lq.id === q.id);
+
+          // question_id = index + 1, zamieniamy na string żeby było zgodne z typem
+          const questionId = (index + 1).toString();
+
+          return {
+            ...q,
+            id: questionId,
+            answer: loadedQ?.answer ?? null,
+            note: loadedQ?.note ?? null,
+            images: loadedQ?.images ?? [],
+          };
+        });
+
+        fullImages[cat] = loadedImages[cat] || {};
       });
-      setQuestions(updatedQuestions);
-      setImagesState(images);
+
+      setQuestions(fullQuestions);
+      setImagesState(fullImages);
+    };
+
+    load();
+  }, [auditId]);
+
+  // ---------------------- SET ANSWER ----------------------
+  const setAnswerFn = (cat: string, id: string, value: boolean) => {
+    setQuestions(prev => {
+      const updatedCategory = prev[cat].map(q =>
+        q.id === id ? { ...q, answer: value } : q
+      );
+
+      const updatedQuestion = updatedCategory.find(q => q.id === id);
+      if (updatedQuestion) saveAnswer(cat, updatedQuestion);
+
+      return { ...prev, [cat]: updatedCategory };
     });
-  }, []);
-
-  const setAnswerFn = (cat: string, id: string, value: boolean | undefined) => {
-    setQuestions(prev => ({
-      ...prev,
-      [cat]: prev[cat]?.map(q => (q.id === id ? { ...q, answer: value } : q)) || [],
-    }));
   };
 
+  // ---------------------- UPDATE NOTE ----------------------
   const updateNoteFn = (cat: string, id: string, note: string) => {
-    setQuestions(prev => ({
-      ...prev,
-      [cat]: prev[cat]?.map(q => (q.id === id ? { ...q, note } : q)) || [],
-    }));
+    setQuestions(prev => {
+      const updatedCategory = prev[cat].map(q =>
+        q.id === id ? { ...q, note } : q
+      );
+
+      const updatedQuestion = updatedCategory.find(q => q.id === id);
+      if (updatedQuestion) saveAnswer(cat, updatedQuestion);
+
+      return { ...prev, [cat]: updatedCategory };
+    });
   };
 
+  // ---------------------- UPLOAD IMAGES ----------------------
   const addImageFn = async (cat: string, id: string, files: FileList) => {
     const uploadedUrls: string[] = [];
     for (let i = 0; i < files.length; i++) {
-      const url = await uploadImage(auditId, cat, id, files[i]);
+      const url = await uploadImage(cat, id, files[i]);
       uploadedUrls.push(url);
     }
 
@@ -66,31 +93,33 @@ export const AuditForm: React.FC = () => {
       },
     }));
 
-    const question = questions[cat]?.find(q => q.id === id);
-    if (question) {
-      question.images = [...(question.images || []), ...uploadedUrls];
-      await saveAnswer(auditId, cat, question);
-    }
+    setQuestions(prev => {
+      const updatedCategory = prev[cat].map(q =>
+        q.id === id ? { ...q, images: [...(q.images || []), ...uploadedUrls] } : q
+      );
+
+      const updatedQuestion = updatedCategory.find(q => q.id === id);
+      if (updatedQuestion) saveAnswer(cat, updatedQuestion);
+
+      return { ...prev, [cat]: updatedCategory };
+    });
   };
 
-  const handleGeneratePDF = () => {
-    generatePDF(questions, imagesState);
-  };
-
+  // ---------------------- RENDER ----------------------
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
       <h1>Raport z audytu</h1>
       <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {questions[activeTab]?.map((q: Question) => (
+      {questions[activeTab]?.map(q => (
         <QuestionItem
           key={q.id}
           q={q}
           activeTab={activeTab}
           setAnswer={setAnswerFn}
           updateNote={updateNoteFn}
-          addImageToQuestion={(cat, id, files) => addImageFn(cat, id, files)}
-          images={imagesState[activeTab]?.[q.id]}
+          addImageToQuestion={addImageFn}
+          images={imagesState[activeTab]?.[q.id] || []}
         />
       ))}
 
@@ -105,10 +134,11 @@ export const AuditForm: React.FC = () => {
           borderRadius: 6,
           cursor: 'pointer',
         }}
-        onClick={handleGeneratePDF}
+        onClick={() => generatePDF(questions, imagesState)}
       >
         Pobierz PDF
       </button>
+
     </div>
   );
 };

@@ -6,7 +6,7 @@ import { ImagePreviewList } from './ImagePreviewList';
 type Props = {
   q: Question;
   activeTab: string;
-  setAnswer: (cat: string, id: string, value: boolean | undefined) => void;
+  setAnswer: (cat: string, id: string, value: boolean) => void;
   updateNote: (cat: string, id: string, text: string) => void;
   addImageToQuestion: (cat: string, id: string, files: FileList) => void;
   images?: string[];
@@ -18,7 +18,7 @@ export const QuestionItem: React.FC<Props> = ({
   setAnswer,
   updateNote,
   addImageToQuestion,
-  images,
+  images = [],
 }) => {
   return (
     <div style={{ marginBottom: 25, borderBottom: '1px solid #ccc', paddingBottom: 10 }}>
@@ -47,14 +47,23 @@ export const QuestionItem: React.FC<Props> = ({
         placeholder="Wpisz własną uwagę..."
         value={q.note || ''}
         onChange={(e) => updateNote(activeTab, q.id, e.target.value)}
-        style={{ width: '100%', padding: 10, borderRadius: 5, border: '1px solid #ccc', marginBottom: 8 }}
+        style={{
+          width: '100%',
+          padding: 10,
+          borderRadius: 5,
+          border: '1px solid #ccc',
+          marginBottom: 8,
+          resize: 'vertical',
+        }}
       />
 
       <ImageUploader onUpload={(files: FileList) => addImageToQuestion(activeTab, q.id, files)} />
 
-      <span style={{ marginLeft: 10, fontStyle: 'italic' }}>
-        {images?.length ? `Dodano: ${images.length} plik` : 'Nie dodano pliku'}
-      </span>
+      <div style={{ marginTop: 5, fontStyle: 'italic' }}>
+        {images.length > 0
+          ? `Dodano: ${images.length} plik${images.length > 1 ? 'i' : ''}`
+          : 'Nie dodano pliku'}
+      </div>
 
       <ImagePreviewList images={images} />
     </div>
