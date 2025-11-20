@@ -14,11 +14,11 @@ export const ImageUploader: React.FC<Props> = ({ onUpload }) => {
 
   return (
     <input
-      type="file"
-      multiple
-      accept="image/*"
-      onChange={handleChange}
-      style={{ marginBottom: 8 }}
-    />
+  type="file"
+  accept="image/*"
+  capture="environment"  // użyj "user" dla przedniej kamery, "environment" dla tylnej
+  multiple
+  onChange={handleChange}
+/>
   );
 };

@@ -10,6 +10,12 @@ type Props = {
   updateNote: (cat: string, id: string, text: string) => void;
   addImageToQuestion: (cat: string, id: string, files: FileList) => void;
   images?: string[];
+  auditId: number;
+  imagesState: Record<string, Record<string, string[]>>;
+  setImagesState: React.Dispatch<React.SetStateAction<Record<string, Record<string, string[]>>>>;
+  questions: Record<string, Question[]>;
+  setQuestions: React.Dispatch<React.SetStateAction<Record<string, Question[]>>>;
+  saveAnswer: (auditId: number, cat: string, question: Question) => void;
 };
 
 export const QuestionItem: React.FC<Props> = ({
@@ -19,7 +25,37 @@ export const QuestionItem: React.FC<Props> = ({
   updateNote,
   addImageToQuestion,
   images = [],
+  auditId,
+  imagesState,
+  setImagesState,
+  questions,
+  setQuestions,
+  saveAnswer
 }) => {
+
+  const handleRemoveImage = (index: number) => {
+    const updatedImages = [...images];
+    updatedImages.splice(index, 1);
+
+    // aktualizacja imagesState
+    setImagesState(prev => ({
+      ...prev,
+      [activeTab]: {
+        ...prev[activeTab],
+        [q.id]: updatedImages
+      }
+    }));
+
+    // aktualizacja pytań
+    const updatedQuestions = questions[activeTab].map(question =>
+      question.id === q.id ? { ...question, images: updatedImages } : question
+    );
+    setQuestions(prev => ({ ...prev, [activeTab]: updatedQuestions }));
+
+    // zapis w Supabase
+    saveAnswer(auditId, activeTab, { ...q, images: updatedImages });
+  };
+
   return (
     <div style={{ marginBottom: 25, borderBottom: '1px solid #ccc', paddingBottom: 10 }}>
       <p style={{ fontSize: 18 }}>{q.text}</p>
@@ -65,7 +101,7 @@ export const QuestionItem: React.FC<Props> = ({
           : 'Nie dodano pliku'}
       </div>
 
-      <ImagePreviewList images={images} />
+      <ImagePreviewList images={images} onRemove={handleRemoveImage} />
     </div>
   );
 };

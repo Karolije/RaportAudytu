@@ -156,18 +156,24 @@ export const AuditForm: React.FC = () => {
       <AuditActions auditId={auditId} />
 
       <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
+{questions[activeTab]?.map(q => (
+  <QuestionItem
+    key={q.id}
+    q={q}
+    activeTab={activeTab}
+    setAnswer={setAnswerFn}
+    updateNote={updateNoteFn}
+    addImageToQuestion={addImageFn}
+    images={imagesState[activeTab]?.[q.id] || []}
+    auditId={auditId}
+    imagesState={imagesState}
+    setImagesState={setImagesState}
+    questions={questions}
+    setQuestions={setQuestions}
+    saveAnswer={saveAnswer}
+  />
+))}
 
-      {questions[activeTab]?.map(q => (
-        <QuestionItem
-          key={q.id}
-          q={q}
-          activeTab={activeTab}
-          setAnswer={setAnswerFn}
-          updateNote={updateNoteFn}
-          addImageToQuestion={addImageFn}
-          images={imagesState[activeTab]?.[q.id] || []}
-        />
-      ))}
 
       <button
         style={{
