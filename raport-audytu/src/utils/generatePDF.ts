@@ -29,11 +29,21 @@ export const generatePDF = async (questions: any, imagesState: any) => {
   const colWidth = 45;
   const baseRowHeight = 18;
 
+
+ categories.forEach((cat, i) => {
+  const centerX = startX + (i + 1) * colWidth + colWidth / 2;
+  const centerY = y + baseRowHeight / 2 + 4; // +4 dla wizualnego dopasowania
+
+  doc.setFont("Roboto", "bold");  // pogrubienie nagłówka
   doc.setFontSize(12);
-  doc.text("Pytanie", startX, y);
-  categories.forEach((cat, i) => {
-    doc.text(cat, startX + (i + 1) * colWidth + colWidth / 2, y, { align: "center" });
-  });
+  doc.setTextColor(20, 60, 120);
+  doc.text(cat, centerX, centerY, { align: "center" });
+
+  // przywracamy normalny font jeśli potrzebne
+  doc.setFont("Roboto", "normal");
+  doc.setTextColor(0, 0, 0);
+});
+
   y += baseRowHeight;
   doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
 
@@ -42,17 +52,38 @@ export const generatePDF = async (questions: any, imagesState: any) => {
     const rowHeight = Math.max(baseRowHeight, wrappedQText.length * 7 + 4);
     doc.text(wrappedQText, startX + 2, y + 7);
 
-    categories.forEach(cat => {
-      const qData = questions[cat]?.[qi];
-      const ansText = qData?.answer === true ? "TAK" : qData?.answer === false ? "NIE" : "";
-      const centerX = startX + (categories.indexOf(cat) + 1) * colWidth + colWidth / 2;
+categories.forEach(cat => {
+  const qData = questions[cat]?.[qi];
+  let ansSymbol = "";
+  if (qData?.answer === true) ansSymbol = "V";
+  else if (qData?.answer === false) ansSymbol = "X";
 
-      if (ansText === "TAK") doc.setTextColor(0, 150, 0);
-      else if (ansText === "NIE") doc.setTextColor(200, 0, 0);
-      else doc.setTextColor(0, 0, 0);
+  const centerX = startX + (categories.indexOf(cat) + 1) * colWidth + colWidth / 2;
 
-      doc.text(ansText, centerX, y + 7, { align: "center" });
-    });
+  // pionowe wyśrodkowanie
+  const centerY = y + rowHeight / 2 + 3; // +3 dla wizualnego dopasowania
+
+  // kolor
+  if (ansSymbol === "V") doc.setTextColor(0, 150, 0);
+  else if (ansSymbol === "X") doc.setTextColor(200, 0, 0);
+  else doc.setTextColor(0, 0, 0);
+
+  // zapisujemy poprzedni font i rozmiar
+  const prevFont = doc.getFont().fontName;
+  const prevFontStyle = doc.getFont().fontStyle;
+  const prevFontSize = doc.getFontSize();
+
+  // ustawiamy pogrubienie i rozmiar
+  doc.setFont("Roboto", "bold");
+  doc.setFontSize(16);
+  doc.text(ansSymbol, centerX, centerY, { align: "center" });
+
+  // przywracamy poprzednie ustawienia
+  doc.setFont(prevFont, prevFontStyle);
+  doc.setFontSize(prevFontSize);
+});
+
+
 
     doc.setTextColor(0, 0, 0);
     y += rowHeight;

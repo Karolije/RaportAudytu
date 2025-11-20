@@ -60,24 +60,44 @@ export const QuestionItem: React.FC<Props> = ({
     <div style={{ marginBottom: 25, borderBottom: '1px solid #ccc', paddingBottom: 10 }}>
       <p style={{ fontSize: 18 }}>{q.text}</p>
 
-      <div style={{ display: 'flex', gap: 20, marginBottom: 8 }}>
-        <label>
-          <input
-            type="radio"
-            checked={q.answer === true}
-            onChange={() => setAnswer(activeTab, q.id, true)}
-          />{' '}
-          Tak
-        </label>
-        <label>
-          <input
-            type="radio"
-            checked={q.answer === false}
-            onChange={() => setAnswer(activeTab, q.id, false)}
-          />{' '}
-          Nie
-        </label>
-      </div>
+  <div style={{ display: 'flex', gap: 20, marginBottom: 8 }}>
+  <button
+    onClick={() => setAnswer(activeTab, q.id, true)}
+    style={{
+      padding: '6px 12px',
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#28a745',
+      borderRadius: 5,
+      cursor: 'pointer',
+      minWidth: 50,
+      border: q.answer === true ? '2px solid #28a745' : '1px solid #28a745',
+      backgroundColor: q.answer === true ? '#c3e6cb' : '#f0f0f0',
+      boxShadow: q.answer === true ? '0 0 5px rgba(0,0,0,0.2)' : 'none',
+    }}
+  >
+    V
+  </button>
+
+  <button
+    onClick={() => setAnswer(activeTab, q.id, false)}
+    style={{
+      padding: '6px 12px',
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#dc3545',
+      borderRadius: 5,
+      cursor: 'pointer',
+      minWidth: 50,
+      border: q.answer === false ? '2px solid #dc3545' : '1px solid #dc3545',
+      backgroundColor: q.answer === false ? '#f5c6cb' : '#f0f0f0',
+      boxShadow: q.answer === false ? '0 0 5px rgba(0,0,0,0.2)' : 'none',
+    }}
+  >
+    X
+  </button>
+</div>
+
 
       <textarea
         placeholder="Wpisz własną uwagę..."
