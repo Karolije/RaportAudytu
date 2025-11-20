@@ -151,8 +151,8 @@ export const AuditForm: React.FC = () => {
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
-      <h1>Raport z audytu</h1>
-      <p>📌 Numer audytu: <strong>{auditId}</strong></p>
+      <h1>Raport z obchodu</h1>
+      <p>📌 Numer obchodu: <strong>{auditId}</strong></p>
       <AuditActions auditId={auditId} />
 
       <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
