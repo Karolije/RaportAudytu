@@ -201,7 +201,7 @@ export const AuditForm: React.FC = () => {
       borderRadius: 6,
       cursor: 'pointer',
     }}
-onClick={() => exportToExcel(questions, imagesState, auditId)}
+onClick={() => exportToExcel(questions,  auditId)}
   >
     📊 Eksport do Excel
   </button>
