@@ -6,6 +6,7 @@ import { QuestionsState, ImagesState } from './types';
 import { loadAuditData, saveAnswer, uploadImage } from '../supabaseAudit';
 import { generatePDF } from '../utils/generatePDF';
 import { AuditActions } from './AuditActions';
+import { exportToExcel } from '../utils/exportToExcel';
 
 export const AuditForm: React.FC = () => {
   const [auditId, setAuditId] = useState<number | null>(null);
@@ -174,22 +175,38 @@ export const AuditForm: React.FC = () => {
   />
 ))}
 
+<div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+  <button
+    style={{
+      padding: '10px 20px',
+      fontSize: 16,
+      backgroundColor: '#1464f4',
+      color: 'white',
+      border: 'none',
+      borderRadius: 6,
+      cursor: 'pointer',
+    }}
+    onClick={() => generatePDF(questions, imagesState)}
+  >
+    📄 Pobierz PDF
+  </button>
 
-      <button
-        style={{
-          marginTop: 20,
-          padding: '10px 20px',
-          fontSize: 16,
-          backgroundColor: '#1464f4',
-          color: 'white',
-          border: 'none',
-          borderRadius: 6,
-          cursor: 'pointer',
-        }}
-        onClick={() => generatePDF(questions, imagesState)}
-      >
-        Pobierz PDF
-      </button>
+  <button
+    style={{
+      padding: '10px 20px',
+      fontSize: 16,
+      backgroundColor: 'green',
+      color: 'white',
+      border: 'none',
+      borderRadius: 6,
+      cursor: 'pointer',
+    }}
+onClick={() => exportToExcel(questions, imagesState, auditId)}
+  >
+    📊 Eksport do Excel
+  </button>
+</div>
+
     </div>
   );
 };
