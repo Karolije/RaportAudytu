@@ -41,6 +41,7 @@ export const generatePDF = async (questions: any, imagesState: any) => {
   y += baseRowHeight;
   doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
 
+  // Wiersze tabeli
   initialQuestions.forEach((q, qi) => {
     const wrappedQText = doc.splitTextToSize(q.text, colWidth - 4);
     const rowHeight = Math.max(baseRowHeight, wrappedQText.length * 7 + 4);
@@ -49,14 +50,14 @@ export const generatePDF = async (questions: any, imagesState: any) => {
     categories.forEach(cat => {
       const qData = questions[cat]?.[qi];
       let ansSymbol = "";
-      if (qData?.answer === true) ansSymbol = "✔";
-      else if (qData?.answer === false) ansSymbol = "✖";
+      if (qData?.answer === true) ansSymbol = "V";
+      else if (qData?.answer === false) ansSymbol = "X";
 
       const centerX = startX + (categories.indexOf(cat) + 1) * colWidth + colWidth / 2;
       const centerY = y + rowHeight / 2 + 3;
 
-      if (ansSymbol === "✔") doc.setTextColor(0, 150, 0);
-      else if (ansSymbol === "✖") doc.setTextColor(200, 0, 0);
+      if (ansSymbol === "V") doc.setTextColor(0, 150, 0);
+      else if (ansSymbol === "X") doc.setTextColor(200, 0, 0);
       else doc.setTextColor(0, 0, 0);
 
       const prevFont = doc.getFont().fontName;
@@ -64,15 +65,15 @@ export const generatePDF = async (questions: any, imagesState: any) => {
       const prevFontSize = doc.getFontSize();
 
       doc.setFont("Roboto", "bold");
-      doc.setFontSize(16);
+      doc.setFontSize(20);
       doc.text(ansSymbol, centerX, centerY, { align: "center" });
 
       doc.setFont(prevFont, prevFontStyle);
       doc.setFontSize(prevFontSize);
     });
 
-    doc.setTextColor(0, 0, 0);
     y += rowHeight;
+    doc.setTextColor(0, 0, 0);
     doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
   });
 
@@ -109,81 +110,92 @@ export const generatePDF = async (questions: any, imagesState: any) => {
       img.onerror = reject;
     });
 
-  // --- 2 KOLUMNY Z POMIAROWĄ WYSOKOŚCIĄ ---
-  const fixedHeight = 90; // wysokość na każde pytanie + zdjęcia
-  const colWidth2 = (pageWidth - 2 * margin) / 2;
-  let yLeft = y;
-  let yRight = y;
-
+  // --- JEDNA KOLUMNA PYTANIA POD PYTANIEM ---
   for (const cat of categories) {
     doc.setFontSize(16);
     doc.setTextColor(20, 60, 120);
-    if (yLeft + fixedHeight > pageHeight - margin && yRight + fixedHeight > pageHeight - margin) {
+
+    if (y + 10 > pageHeight - margin) {
       doc.addPage();
-      yLeft = margin;
-      yRight = margin;
+      y = margin;
     }
-    doc.text(`Zakład: ${cat}`, margin, yLeft);
-    yLeft += 10;
+    doc.text(`Zakład: ${cat}`, margin, y);
+    y += 10;
 
     const catQuestions = questions[cat] || initialQuestions.map(q => ({ ...q }));
-    let colIndex = 0;
 
     for (const q of catQuestions) {
-      const xPos = margin + colIndex * colWidth2;
-      const yPos = colIndex === 0 ? yLeft : yRight;
-      let usedHeight = 0;
-
-      const qLines = doc.splitTextToSize(`• ${q.text}`, colWidth2 - 5);
-      doc.setFontSize(12);
-      doc.setTextColor(0, 0, 0);
-      doc.text(qLines, xPos, yPos);
-      usedHeight += qLines.length * 7 + 2;
+      // Sprawdzenie miejsca na pytanie
+      const qLines = doc.splitTextToSize(`• ${q.text}`, pageWidth - 2 * margin);
+      let requiredHeight = qLines.length * 7 + 2;
 
       if (q.note && q.note.trim() !== "") {
-        const noteLines = doc.splitTextToSize(`Uwaga: ${q.note}`, colWidth2 - 5);
-        doc.setTextColor(100, 100, 100);
-        doc.text(noteLines, xPos, yPos + usedHeight);
-        usedHeight += noteLines.length * 7 + 2;
-        doc.setTextColor(0, 0, 0);
+        const noteLines = doc.splitTextToSize(`Uwaga: ${q.note}`, pageWidth - 2 * margin);
+        requiredHeight += noteLines.length * 7 + 2;
       }
 
       const qImages = imagesState[cat]?.[q.id] || [];
-      let remainingHeight = fixedHeight - usedHeight;
+      let imgHeights = 0;
+
+      for (const imgSrc of qImages) {
+        try {
+          const img = await loadImage(await imageToBase64(imgSrc));
+          const imgWidthMm = img.width * 0.264583;
+          const imgHeightMm = img.height * 0.264583;
+          const scale = Math.min((pageWidth - 2 * margin) / imgWidthMm, 1);
+          imgHeights += imgHeightMm * scale + 5;
+        } catch {}
+      }
+
+      if (y + requiredHeight + imgHeights > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+
+      // Tekst pytania
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text(qLines, margin, y);
+      y += qLines.length * 7 + 2;
+
+      // Notatka
+      if (q.note && q.note.trim() !== "") {
+        const noteLines = doc.splitTextToSize(`Uwaga: ${q.note}`, pageWidth - 2 * margin);
+        doc.setTextColor(100, 100, 100);
+        doc.text(noteLines, margin, y);
+        y += noteLines.length * 7 + 2;
+        doc.setTextColor(0, 0, 0);
+      }
+
+      // Obrazki
       for (const imgSrc of qImages) {
         try {
           const base64 = await imageToBase64(imgSrc);
-          if (!base64) continue;
           const img = await loadImage(base64);
           let imgWidthMm = img.width * 0.264583;
           let imgHeightMm = img.height * 0.264583;
-
-          const maxWidth = colWidth2 - 5;
-          const maxHeight = remainingHeight - 5;
+          const maxWidth = pageWidth - 2 * margin;
+          const maxHeight = pageHeight - margin - y;
           const scale = Math.min(maxWidth / imgWidthMm, maxHeight / imgHeightMm, 1);
           imgWidthMm *= scale;
           imgHeightMm *= scale;
 
-          if (yPos + imgHeightMm > pageHeight - margin) {
+          if (y + imgHeightMm > pageHeight - margin) {
             doc.addPage();
-            usedHeight = 0;
+            y = margin;
           }
 
-          doc.addImage(base64, "JPEG", xPos, yPos + usedHeight, imgWidthMm, imgHeightMm);
-          usedHeight += imgHeightMm + 3;
-          remainingHeight = fixedHeight - usedHeight;
+          doc.addImage(base64, "JPEG", margin, y, imgWidthMm, imgHeightMm);
+          y += imgHeightMm + 5;
         } catch {}
       }
 
-      if (qImages.length === 0) usedHeight += 12;
+      if (qImages.length === 0) y += 12;
 
-      if (colIndex === 0) yLeft += fixedHeight;
-      else yRight += fixedHeight;
-
-      colIndex = colIndex === 0 ? 1 : 0;
+      y += 5; // odstęp między pytaniami
     }
 
-    y = Math.max(yLeft, yRight) + 10;
+    y += 10; // odstęp między kategoriami
   }
 
   const fileName = `Raport-Audytu-${new Date().toISOString().slice(0, 10)}.pdf`;
