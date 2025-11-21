@@ -122,19 +122,51 @@ export const generatePDF = async (questions: any, imagesState: any) => {
     doc.setFontSize(16);
     doc.setTextColor(20, 60, 120);
 
+    const catQuestions = questions[cat] || initialQuestions.map(q => ({ ...q }));
+    if (catQuestions.length === 0) continue;
+
+    // --- Obliczamy wysokość pierwszego pytania ---
+    const firstQ = catQuestions[0];
+    const firstQLines = doc.splitTextToSize(`• ${firstQ.text}`, columnWidth);
+    let firstBlockHeight = firstQLines.length * 7 + 2;
+    if (firstQ.note && firstQ.note.trim() !== "") {
+      const noteLines = doc.splitTextToSize(`Uwaga: ${firstQ.note}`, columnWidth);
+      firstBlockHeight += noteLines.length * 7 + 2;
+    }
+    const firstImages = imagesState[cat]?.[firstQ.id] || [];
+    let tempImgHeight = 0;
+    for (let r = 0; r < Math.ceil(firstImages.length / 2); r++) {
+      let rowH = 0;
+      for (let c = 0; c < 2; c++) {
+        const idx = r * 2 + c;
+        if (idx >= firstImages.length) break;
+        try {
+          const img = await loadImage(await imageToBase64(firstImages[idx]));
+          let imgW = img.width * 0.264583;
+          let imgH = img.height * 0.264583;
+          const scale = Math.min(maxImgWidth / imgW, maxImgHeight / imgH, 1);
+          rowH = Math.max(rowH, imgH * scale);
+        } catch {}
+      }
+      tempImgHeight += rowH + imageSpacing;
+    }
+    firstBlockHeight += tempImgHeight + 5;
     const headerHeight = 10;
-    if (Math.max(colY[0], colY[1]) + headerHeight > pageHeight - margin) {
+
+    // --- Sprawdzamy, czy zmieści się nagłówek + pierwsze pytanie ---
+    const currentY = Math.max(colY[0], colY[1]);
+    if (currentY + headerHeight + firstBlockHeight > pageHeight - margin) {
       doc.addPage();
       colY = [margin, margin];
     }
 
-    doc.text(`Zakład: ${cat}`, margin, colY[0]);
+    // --- Rysujemy nagłówek ---
+    doc.text(`Linia: ${cat}`, margin, colY[0]);
     colY[0] += headerHeight;
     colY[1] += headerHeight;
 
-    const catQuestions = questions[cat] || initialQuestions.map(q => ({ ...q }));
+    // --- Wstawiamy wszystkie pytania ---
     let colIndex = 0;
-
     for (const q of catQuestions) {
       const currentCol = colIndex % 2;
       let yPos = colY[currentCol];
@@ -143,7 +175,6 @@ export const generatePDF = async (questions: any, imagesState: any) => {
       let blockHeight = 0;
       const qLines = doc.splitTextToSize(`• ${q.text}`, columnWidth);
       blockHeight += qLines.length * 7 + 2;
-
       if (q.note && q.note.trim() !== "") {
         const noteLines = doc.splitTextToSize(`Uwaga: ${q.note}`, columnWidth);
         blockHeight += noteLines.length * 7 + 2;
@@ -166,22 +197,29 @@ export const generatePDF = async (questions: any, imagesState: any) => {
         }
         tempImgHeight += rowH + imageSpacing;
       }
-      blockHeight += tempImgHeight + 5; // mały odstęp po zdjęciach
+      blockHeight += tempImgHeight + 5;
 
-      // jeśli nie mieści się blok, przenosimy całość na nową stronę
+      // --- Jeśli nie mieści się na stronie, przenosimy cały blok ---
       if (yPos + blockHeight > pageHeight - margin) {
         doc.addPage();
         colY = [margin, margin];
         yPos = colY[currentCol];
+
+        // Ponownie rysujemy nagłówek, jeśli pierwszy blok na nowej stronie
+        if (colIndex === 0) {
+          doc.text(`Linia: ${cat}`, margin, yPos);
+          yPos += headerHeight;
+          colY[currentCol] = yPos;
+        }
       }
 
-      // pytanie
+      // --- Rysujemy pytanie ---
       doc.setFontSize(12);
       doc.setTextColor(0, 0, 0);
       doc.text(qLines, margin + currentCol * (columnWidth + 10), yPos);
       yPos += qLines.length * 7 + 2;
 
-      // komentarz
+      // --- Rysujemy komentarz ---
       if (q.note && q.note.trim() !== "") {
         const noteLines = doc.splitTextToSize(`Uwaga: ${q.note}`, columnWidth);
         doc.setTextColor(100, 100, 100);
@@ -190,7 +228,7 @@ export const generatePDF = async (questions: any, imagesState: any) => {
         doc.setTextColor(0, 0, 0);
       }
 
-      // zdjęcia w max 2x2
+      // --- Wstawiamy zdjęcia ---
       let imgY = yPos;
       for (let r = 0; r < Math.ceil(qImages.length / 2); r++) {
         let rowHeight = 0;
@@ -218,6 +256,7 @@ export const generatePDF = async (questions: any, imagesState: any) => {
       colIndex++;
     }
 
+    // odstęp po kategorii
     colY[0] += 10;
     colY[1] += 10;
   }
