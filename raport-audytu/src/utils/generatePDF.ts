@@ -14,6 +14,6 @@ export const generatePDF = async (questions: any, imagesState: any) => {
   const startY = generateSummaryTable(doc, questions);
   await generateQuestionsSection(doc, questions, imagesState, startY);
 
-  const fileName = `Raport-Audytu-${new Date().toISOString().slice(0, 10)}.pdf`;
+  const fileName = `Zagadnienia-Krytyczne-${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(fileName);
 };

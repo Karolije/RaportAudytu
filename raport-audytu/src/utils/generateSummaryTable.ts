@@ -3,24 +3,42 @@ import { categories, initialQuestions } from "../data/questions";
 
 export const generateSummaryTable = (doc: jsPDF, questions: any) => {
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 10;
-  let y = 20;
-  const baseRowHeight = 18;
-  const startX = margin;
-  const colWidth = 45;
+  const margin = 4;
 
-  // --- NAGŁÓWEK ---
+  let y = 10; // START wyżej
+  const baseRowHeight = 16;
+  const startX = margin;
+
+  // Szerokości kolumn
+  const firstColWidth = 120;
+  const otherColWidth = (pageWidth - margin * 2 - firstColWidth) / categories.length;
+  const totalWidth = firstColWidth + categories.length * otherColWidth;
+
+  // --- Nagłówek dokumentu ---
   doc.setFontSize(18);
-  doc.text("Raport Audytu", pageWidth / 2, y, { align: "center" });
+  doc.text("Zagadnienia krytyczne", pageWidth / 2, y, { align: "center" });
   y += 10;
   doc.setFontSize(14);
-  doc.text("Tabela zbiorcza", pageWidth / 2, y, { align: "center" });
-  y += 10;
 
-  // --- TABELA ZBIORCZA ---
+
+  // --- Legenda nad tabelą ---
+  doc.setFont("Roboto", "bold");
+  doc.setFontSize(10);
+  doc.text("Metodologia:", startX, y);
+  doc.setFont("Roboto", "normal");
+  doc.setFontSize(10);
+  doc.text("V = zgodność  X = niezgodność", startX + 30, y);
+  y += 8; // odstęp przed tabelą
+
+  // Górna linia tabeli
+  doc.line(startX, y, startX + totalWidth, y);
+  const tableStartY = y;
+
+  // --- Nagłówki kategorii ---
   categories.forEach((cat, i) => {
-    const centerX = startX + (i + 1) * colWidth + colWidth / 2;
+    const centerX = startX + firstColWidth + i * otherColWidth + otherColWidth / 2;
     const centerY = y + baseRowHeight / 2 + 4;
+
     doc.setFont("Roboto", "bold");
     doc.setFontSize(12);
     doc.setTextColor(20, 60, 120);
@@ -30,47 +48,74 @@ export const generateSummaryTable = (doc: jsPDF, questions: any) => {
   });
 
   y += baseRowHeight;
-  doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
 
+  // Linia pod nagłówkami
+  doc.line(startX, y, startX + totalWidth, y);
+
+  // --- Pytania i odpowiedzi ---
   initialQuestions.forEach((q, qi) => {
-    const wrappedQText = doc.splitTextToSize(q.text, colWidth - 4);
-    const rowHeight = Math.max(baseRowHeight, wrappedQText.length * 7 + 4);
+    const wrappedQText = doc.splitTextToSize(q.text, firstColWidth - 4);
+    const desc = q.description || "";
+    const wrappedDesc = desc ? doc.splitTextToSize(desc, firstColWidth - 4) : [];
+
+    const rowHeight = Math.max(
+      baseRowHeight,
+      wrappedQText.length * 7 + 4 + wrappedDesc.length * 5
+    );
+
+    // --- Rysujemy pytanie ---
+    doc.setFont("Roboto", "normal");
+    doc.setFontSize(12);
     doc.text(wrappedQText, startX + 2, y + 7);
 
-    categories.forEach(cat => {
+    // --- Rysujemy opis pod pytaniem ---
+    if (wrappedDesc.length > 0) {
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 50);
+
+      doc.text(wrappedDesc, startX + 2, y + 7 + wrappedQText.length * 7, {
+        maxWidth: firstColWidth - 4
+      });
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+    }
+
+    // --- Rysujemy symbole odpowiedzi ---
+    categories.forEach((cat, ci) => {
       const qData = questions[cat]?.[qi];
       let ansSymbol = "";
+
       if (qData?.answer === true) ansSymbol = "V";
       else if (qData?.answer === false) ansSymbol = "X";
 
-      const centerX = startX + (categories.indexOf(cat) + 1) * colWidth + colWidth / 2;
-      const centerY = y + rowHeight / 2 + 3;
+      const centerX = startX + firstColWidth + ci * otherColWidth + otherColWidth / 2;
+      const centerY = y + baseRowHeight / 2 + 3;
 
       if (ansSymbol === "V") doc.setTextColor(0, 150, 0);
       else if (ansSymbol === "X") doc.setTextColor(200, 0, 0);
       else doc.setTextColor(0, 0, 0);
 
-      const prevFont = doc.getFont().fontName;
-      const prevFontStyle = doc.getFont().fontStyle;
-      const prevFontSize = doc.getFontSize();
-
       doc.setFont("Roboto", "bold");
       doc.setFontSize(20);
       doc.text(ansSymbol, centerX, centerY, { align: "center" });
-
-      doc.setFont(prevFont, prevFontStyle);
-      doc.setFontSize(prevFontSize);
+      doc.setFont("Roboto", "normal");
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
     });
 
-    doc.setTextColor(0, 0, 0);
     y += rowHeight;
-    doc.line(startX, y, startX + (categories.length + 1) * colWidth, y);
+    doc.line(startX, y, startX + totalWidth, y);
   });
 
-  for (let i = 0; i <= categories.length + 1; i++) {
-    const xPos = startX + i * colWidth;
-    doc.line(xPos, 20 + baseRowHeight, xPos, y);
-  }
+  // --- pionowe linie tabeli ---
+  doc.line(startX, tableStartY, startX, y);
+  doc.line(startX + firstColWidth, tableStartY, startX + firstColWidth, y);
+  categories.forEach((_, i) => {
+    const x = startX + firstColWidth + (i + 1) * otherColWidth;
+    doc.line(x, tableStartY, x, y);
+  });
 
-  return y + 15; // zwraca pozycję Y po tabeli
+  // Zwracamy pozycję dalszej części dokumentu
+  return y + 10;
 };

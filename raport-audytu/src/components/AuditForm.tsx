@@ -182,7 +182,7 @@ const downloadAllImages = async (imagesState: any) => {
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
-      <h1>Raport z obchodu</h1>
+      <h1>Zagadnienia krytyczne</h1>
       <p>📌 Numer obchodu: <strong>{auditId}</strong></p>
       <AuditActions auditId={auditId} />
 

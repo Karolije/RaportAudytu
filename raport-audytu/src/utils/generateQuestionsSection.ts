@@ -10,13 +10,13 @@ export const generateQuestionsSection = async (
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 10;
-  const columnWidth = (pageWidth - 2 * margin - 10) / 2;
+  const columnWidth = pageWidth - 2 * margin;
   const imageSpacing = 5;
-  const maxImgWidth = (columnWidth - imageSpacing) * 0.95;
-  const maxImgHeight = 140;
-  const headerHeight = 10;
+  const maxImgWidth = columnWidth * 0.95;
+  const maxImgHeight = 80;
+  const headerHeight = 16;
 
-  let colY = [startY, startY];
+  let yPos = startY;
 
   const loadImage = (src: string) =>
     new Promise<HTMLImageElement>((resolve, reject) => {
@@ -50,136 +50,84 @@ export const generateQuestionsSection = async (
     const catQuestions = questions[cat] || initialQuestions.map(q => ({ ...q }));
     if (catQuestions.length === 0) continue;
 
-    // --- Sprawdzamy wysokość pierwszego pytania ---
-    const firstQ = catQuestions[0];
-    const firstQLines = doc.splitTextToSize(`• ${firstQ.text}`, columnWidth);
-    let firstBlockHeight = firstQLines.length * 7 + 2;
-    if (firstQ.note && firstQ.note.trim() !== "") {
-      const noteLines = doc.splitTextToSize(`Uwaga: ${firstQ.note}`, columnWidth);
-      firstBlockHeight += noteLines.length * 7 + 2;
-    }
-    const firstImages = imagesState[cat]?.[firstQ.id] || [];
-    let tempImgHeight = 0;
-    for (let r = 0; r < Math.ceil(firstImages.length / 2); r++) {
-      let rowH = 0;
-      for (let c = 0; c < 2; c++) {
-        const idx = r * 2 + c;
-        if (idx >= firstImages.length) break;
-        try {
-          const img = await loadImage(await imageToBase64(firstImages[idx]));
-          let imgW = img.width * 0.264583;
-          let imgH = img.height * 0.264583;
-          const scale = Math.min(maxImgWidth / imgW, maxImgHeight / imgH, 1);
-          rowH = Math.max(rowH, imgH * scale);
-        } catch {}
-      }
-      tempImgHeight += rowH + imageSpacing;
-    }
-    firstBlockHeight += tempImgHeight + 5;
-
-    const currentY = Math.max(colY[0], colY[1]);
-    if (currentY + headerHeight + firstBlockHeight > pageHeight - margin) {
-      doc.addPage();
-      colY = [margin, margin];
-    }
-
     // --- Nagłówek kategorii ---
-    doc.text(`Linia: ${cat}`, margin, colY[0]);
-    colY[0] += headerHeight;
-    colY[1] += headerHeight;
+    if (yPos + headerHeight > pageHeight - margin) {
+      doc.addPage();
+      yPos = margin;
+    }
+    doc.text(`Linia: ${cat}`, margin, yPos);
+    yPos += headerHeight;
 
-    // --- Wstawiamy wszystkie pytania ---
-    let colIndex = 0;
     for (const q of catQuestions) {
-      const currentCol = colIndex % 2;
-      let yPos = colY[currentCol];
+      const qImages = imagesState[cat]?.[q.id] || [];
 
-      // Obliczamy wysokość bloku pytania + komentarza + zdjęć
-      let blockHeight = 0;
+      // --- Obliczamy wysokość całego bloku pytania + komentarza + zdjęć ---
       const qLines = doc.splitTextToSize(`• ${q.text}`, columnWidth);
-      blockHeight += qLines.length * 7 + 2;
+      let blockHeight = qLines.length * 7 + 2;
 
       if (q.note && q.note.trim() !== "") {
         const noteLines = doc.splitTextToSize(`Uwaga: ${q.note}`, columnWidth);
         blockHeight += noteLines.length * 7 + 2;
       }
 
-      const qImages = imagesState[cat]?.[q.id] || [];
-      tempImgHeight = 0;
-      for (let r = 0; r < Math.ceil(qImages.length / 2); r++) {
-        let rowH = 0;
-        for (let c = 0; c < 2; c++) {
-          const idx = r * 2 + c;
-          if (idx >= qImages.length) break;
-          try {
-            const img = await loadImage(await imageToBase64(qImages[idx]));
-            let imgW = img.width * 0.264583;
-            let imgH = img.height * 0.264583;
-            const scale = Math.min(maxImgWidth / imgW, maxImgHeight / imgH, 1);
-            rowH = Math.max(rowH, imgH * scale);
-          } catch {}
-        }
-        tempImgHeight += rowH + imageSpacing;
+      // Dodajemy wysokość wszystkich zdjęć
+      for (const imgSrc of qImages) {
+        try {
+          const img = await loadImage(await imageToBase64(imgSrc));
+          let imgW = img.width * 0.264583;
+          let imgH = img.height * 0.264583;
+          const scale = Math.min(maxImgWidth / imgW, maxImgHeight / imgH, 1);
+          blockHeight += imgH * scale + imageSpacing;
+        } catch {}
       }
-      blockHeight += tempImgHeight + 5;
+      blockHeight += 5; // mała przerwa pod pytaniem
 
-      // --- Przenosimy blok na nową stronę jeśli nie mieści się ---
+      // --- Sprawdzamy czy blok mieści się na stronie ---
       if (yPos + blockHeight > pageHeight - margin) {
         doc.addPage();
-        colY = [margin, margin];
-        yPos = colY[currentCol];
-
-        if (colIndex === 0) {
-          doc.text(`Linia: ${cat}`, margin, yPos);
-          yPos += headerHeight;
-          colY[currentCol] = yPos;
-        }
+        yPos = margin;
       }
 
       // --- Rysujemy pytanie ---
       doc.setFontSize(12);
       doc.setTextColor(0, 0, 0);
-      doc.text(qLines, margin + currentCol * (columnWidth + 10), yPos);
+      doc.text(qLines, margin, yPos);
       yPos += qLines.length * 7 + 2;
 
       // --- Rysujemy komentarz ---
       if (q.note && q.note.trim() !== "") {
         const noteLines = doc.splitTextToSize(`Uwaga: ${q.note}`, columnWidth);
         doc.setTextColor(100, 100, 100);
-        doc.text(noteLines, margin + currentCol * (columnWidth + 10), yPos);
+        doc.text(noteLines, margin, yPos);
         yPos += noteLines.length * 7 + 2;
         doc.setTextColor(0, 0, 0);
       }
 
-      // --- Wstawiamy zdjęcia ---
-      let imgY = yPos;
-      for (let r = 0; r < Math.ceil(qImages.length / 2); r++) {
-        let rowHeight = 0;
-        for (let c = 0; c < 2; c++) {
-          const idx = r * 2 + c;
-          if (idx >= qImages.length) break;
-          try {
-            const base64 = await imageToBase64(qImages[idx]);
-            const img = await loadImage(base64);
-            let imgW = img.width * 0.264583;
-            let imgH = img.height * 0.264583;
-            const scale = Math.min(maxImgWidth / imgW, maxImgHeight / imgH, 1);
-            imgW *= scale;
-            imgH *= scale;
+      // --- Rysujemy wszystkie zdjęcia ---
+      for (const imgSrc of qImages) {
+        try {
+          const base64 = await imageToBase64(imgSrc);
+          const img = await loadImage(base64);
+          let imgW = img.width * 0.264583;
+          let imgH = img.height * 0.264583;
+          const scale = Math.min(maxImgWidth / imgW, maxImgHeight / imgH, 1);
+          imgW *= scale;
+          imgH *= scale;
 
-            const imgX = margin + currentCol * (columnWidth + 10) + c * (maxImgWidth + imageSpacing);
-            doc.addImage(base64, "JPEG", imgX, imgY, imgW, imgH);
-            rowHeight = Math.max(rowHeight, imgH);
-          } catch {}
-        }
-        imgY += rowHeight + imageSpacing;
+          if (yPos + imgH > pageHeight - margin) {
+            doc.addPage();
+            yPos = margin;
+          }
+          doc.addImage(base64, "JPEG", margin, yPos, imgW, imgH);
+          yPos += imgH + imageSpacing;
+        } catch {}
       }
 
-      colY[currentCol] = imgY + 5;
-      colIndex++;
+      // --- Mała przerwa między pytaniami ---
+      yPos += 5;
     }
 
-    colY[0] += 10;
-    colY[1] += 10;
+    // --- Przerwa po kategorii ---
+    yPos += 10;
   }
 };

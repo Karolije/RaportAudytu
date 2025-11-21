@@ -75,5 +75,5 @@ export const exportToExcel = async (
   // --- Eksport w przeglądarce ---
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  saveAs(blob, `Raport-Audytu-${auditId}.xlsx`);
+  saveAs(blob, `Zagadnienia-krytyczne-${auditId}.xlsx`);
 };
