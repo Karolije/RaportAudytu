@@ -80,6 +80,32 @@ export const AuditForm: React.FC = () => {
       return { ...prev, [cat]: updatedCategory };
     });
   };
+const downloadAllImages = async (imagesState: any) => {
+  for (const line of Object.keys(imagesState)) {
+    for (const qId of Object.keys(imagesState[line])) {
+      const images = imagesState[line][qId];
+      for (let i = 0; i < images.length; i++) {
+        const url = images[i];
+        try {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `${line}_pytanie${qId}_${i + 1}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+          await new Promise(r => setTimeout(r, 100)); // <- krótka przerwa
+        } catch (e) {
+          console.error("Błąd pobierania:", url, e);
+        }
+      }
+    }
+  }
+};
+
+
 
   // ---------------------- UPDATE NOTE ----------------------
   const updateNoteFn = (cat: string, id: string, note: string) => {
@@ -124,13 +150,17 @@ export const AuditForm: React.FC = () => {
     return (
       <div style={{ padding: 20, maxWidth: 400, margin: '50px auto', textAlign: 'center' }}>
         <h2>Wpisz numer audytu</h2>
-        <input
-          type="number"
-          value={auditInput}
-          onChange={e => setAuditInput(e.target.value)}
-          placeholder="Numer audytu"
-          style={{ padding: 10, fontSize: 16, width: '100%', marginBottom: 10 }}
-        />
+       <input
+  type="number"
+  value={auditInput}
+  onChange={e => setAuditInput(e.target.value)}
+  onKeyDown={e => {
+    if (e.key === "Enter") handleAuditSubmit();
+  }}
+  placeholder="Numer audytu"
+  style={{ padding: 10, fontSize: 16, width: '100%', marginBottom: 10 }}
+/>
+
         <button
           onClick={handleAuditSubmit}
           style={{
@@ -205,6 +235,9 @@ onClick={() => exportToExcel(questions,  auditId)}
   >
     📊 Eksport do Excel
   </button>
+  <button onClick={() => downloadAllImages(imagesState)}>
+  Pobierz wszystkie zdjęcia
+</button>
 </div>
 
     </div>
