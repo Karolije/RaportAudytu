@@ -118,27 +118,122 @@ export const NonCriticalEntries: React.FC<Props> = ({
       ) : (
         <ul style={{ listStyle: "none", padding: 0 }}>
           {entries.map(entry => (
-            <li
-              key={entry.id || `${entry.name}-${Math.random()}`}
-              style={{
-                marginBottom: 10,
-                border: "1px solid #ccc",
-                padding: 10,
-                borderRadius: 6,
-                backgroundColor: isFinished ? "#f5f5f5" : "white"
-              }}
-            >
-          <div
+           <li
+  key={entry.id || `${entry.name}-${Math.random()}`}
   style={{
-    wordBreak: "break-word",
-    overflowWrap: "anywhere",
-    whiteSpace: "pre-wrap"
+    marginBottom: 10,
+    border: "1px solid #ccc",
+    padding: 10,
+    borderRadius: 6,
+    backgroundColor: isFinished ? "#f5f5f5" : "white",
+    overflow: "hidden"
   }}
 >
-  <strong>{entry.name}</strong>{" "}
-  <em>({entry.line})</em>
-</div>
-            </li>
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 10
+    }}
+  >
+    <div
+      style={{
+        flex: 1,
+        minWidth: 0,
+        wordBreak: "break-word",
+        overflowWrap: "anywhere",
+        whiteSpace: "pre-wrap"
+      }}
+    >
+      <strong>{entry.name}</strong> <em>({entry.line})</em>
+
+      {entry.note && (
+        <p
+          style={{
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            whiteSpace: "pre-wrap"
+          }}
+        >
+          {entry.note}
+        </p>
+      )}
+
+      {entry.images && entry.images.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginTop: 8,
+            flexWrap: "wrap"
+          }}
+        >
+          {entry.images.map((img, index) => (
+            <img
+              key={index}
+              src={imageUrls[img]}
+              alt={`Zdjęcie ${index + 1}`}
+              style={{
+                width: 80,
+                height: 80,
+                objectFit: "cover",
+                borderRadius: 6,
+                border: "1px solid #ccc",
+                cursor: "pointer",
+                transition: "transform 0.2s"
+              }}
+              onClick={() => window.open(imageUrls[img], "_blank")}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.transform = "scale(1.1)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.transform = "scale(1)")
+              }
+            />
+          ))}
+        </div>
+      )}
+    </div>
+
+    <div style={{ display: "flex", gap: 10 }}>
+      <button
+        disabled={isFinished}
+        onClick={() => {
+          const newName = prompt("Edytuj nazwę:", entry.name);
+          if (!newName) return;
+
+          const newLine =
+            prompt("Edytuj linię:", entry.line) || entry.line;
+
+          updateEntry({
+            ...entry,
+            name: newName,
+            line: newLine
+          });
+        }}
+        style={{
+          cursor: isFinished ? "not-allowed" : "pointer",
+          opacity: isFinished ? 0.5 : 1
+        }}
+      >
+        ✏️
+      </button>
+
+      <button
+        disabled={isFinished}
+        onClick={() => removeEntry(entry.id)}
+        style={{
+          cursor: isFinished ? "not-allowed" : "pointer",
+          color: "red",
+          opacity: isFinished ? 0.5 : 1
+        }}
+      >
+        🗑️
+      </button>
+    </div>
+  </div>
+</li>
           ))}
         </ul>
       )}
