@@ -1,14 +1,14 @@
 {
   "files": {
     "main.css": "/raport-obchodu/static/css/main.e42df3b7.css",
-    "main.js": "/raport-obchodu/static/js/main.267e2917.js",
+    "main.js": "/raport-obchodu/static/js/main.6670631d.js",
     "static/js/239.57ef20ab.chunk.js": "/raport-obchodu/static/js/239.57ef20ab.chunk.js",
     "static/js/977.51d06dfc.chunk.js": "/raport-obchodu/static/js/977.51d06dfc.chunk.js",
     "static/js/455.f83efa3a.chunk.js": "/raport-obchodu/static/js/455.f83efa3a.chunk.js",
     "static/js/453.7ffd39fe.chunk.js": "/raport-obchodu/static/js/453.7ffd39fe.chunk.js",
     "index.html": "/raport-obchodu/index.html",
     "main.e42df3b7.css.map": "/raport-obchodu/static/css/main.e42df3b7.css.map",
-    "main.267e2917.js.map": "/raport-obchodu/static/js/main.267e2917.js.map",
+    "main.6670631d.js.map": "/raport-obchodu/static/js/main.6670631d.js.map",
     "239.57ef20ab.chunk.js.map": "/raport-obchodu/static/js/239.57ef20ab.chunk.js.map",
     "977.51d06dfc.chunk.js.map": "/raport-obchodu/static/js/977.51d06dfc.chunk.js.map",
     "455.f83efa3a.chunk.js.map": "/raport-obchodu/static/js/455.f83efa3a.chunk.js.map",
@@ -16,6 +16,6 @@
   },
   "entrypoints": [
     "static/css/main.e42df3b7.css",
-    "static/js/main.267e2917.js"
+    "static/js/main.6670631d.js"
   ]
 }
